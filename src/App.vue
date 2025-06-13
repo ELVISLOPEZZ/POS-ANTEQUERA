@@ -6,8 +6,6 @@
       <nav class="nav-botones">
         <button @click="irA('Caja')" :class="{ activo: vista === 'Caja' }">Caja</button>
         <button @click="irA('Inventario')" :class="{ activo: vista === 'Inventario' }">Inventario</button>
-        <button @click="mostrarFormularioProducto" :class="{ activo: vista === 'FormularioProducto' }">Nuevo Producto
-        </button>
         <button @click="irA('Reportes')" :class="{ activo: vista === 'Reportes' }">Reportes</button>
         <button @click="cerrarSesion" class="btn-logout">Cerrar sesión</button>
       </nav>
@@ -16,10 +14,20 @@
     <main class="contenido">
       <router-view v-if="!logueado" />
       <div v-else>
-        <CajaView v-if="vista === 'Caja'" @nueva-venta="agregarVenta" />
-        <InventarioView v-else-if="vista === 'Inventario'" />
-        <ProductForm v-else-if="vista === 'FormularioProducto'" />
-        <ReportesView v-else-if="vista === 'Reportes'" :ventas="ventas" />
+        <CajaView
+          v-if="vista === 'Caja'"
+          :sucursal="sucursalActual"
+          @nueva-venta="agregarVenta"
+        />
+        <InventarioView
+          v-else-if="vista === 'Inventario'"
+          :sucursal="sucursalActual"
+        />
+        <ReportesView
+          v-else-if="vista === 'Reportes'"
+          :ventas="ventas"
+          :sucursal="sucursalActual"
+        />
       </div>
     </main>
 
@@ -42,7 +50,6 @@
 import CajaView from './views/CajaView.vue'
 import InventarioView from './views/InventarioView.vue'
 import ReportesView from './views/ReportesView.vue'
-import ProductForm from './components/ProductForm.vue' // 👈 nuevo componente importado
 import { logout, isLoggedIn } from './auth.js'
 
 export default {
@@ -50,23 +57,20 @@ export default {
   components: {
     CajaView,
     InventarioView,
-    ReportesView,
-    ProductForm // 👈 nuevo componente registrado
+    ReportesView
   },
   data() {
     return {
       vista: 'Caja',
       ventas: [],
       logueado: false,
-      mostrarAlerta: false
+      mostrarAlerta: false,
+      sucursalActual: '' // ✅ NUEVA VARIABLE
     }
   },
   methods: {
     irA(vista) {
       this.vista = vista
-    },
-    mostrarFormularioProducto() {
-      this.vista = 'FormularioProducto'
     },
     agregarVenta(nuevaVenta) {
       this.ventas.push(nuevaVenta)
@@ -78,6 +82,8 @@ export default {
       logout()
       this.mostrarAlerta = false
       this.logueado = false
+      this.sucursalActual = ''
+      localStorage.removeItem('store_code')
       this.$router.push('/')
     },
     cancelarCerrarSesion() {
@@ -88,6 +94,8 @@ export default {
     this.logueado = isLoggedIn()
     if (!this.logueado) {
       this.$router.push('/')
+    } else {
+      this.sucursalActual = localStorage.getItem('store_code') || ''
     }
   },
   watch: {

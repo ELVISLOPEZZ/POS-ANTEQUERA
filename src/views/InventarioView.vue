@@ -116,28 +116,9 @@
 export default {
   data() {
     return {
-      // Productos iniciales de prueba
-      productos: JSON.parse(localStorage.getItem('productos')) || [
-        {
-          id: 1,
-          nombre: 'Camiseta Verde',
-          categoria: 'Ropa',
-          precio: 199.99,
-          stock: 10,
-          imagen:
-            'https://m.media-amazon.com/images/I/51tc2UgRMXL._AC_UF894,1000_QL80_.jpg'
-        },
-        {
-          id: 2,
-          nombre: 'Auriculares Bluetooth',
-          categoria: 'Electrónica',
-          precio: 599.5,
-          stock: 5,
-          imagen:
-            'https://mobomx.vtexassets.com/arquivos/ids/196876-800-auto?v=638212067600330000&width=800&height=auto&aspect=true'
-        }
-      ],
-      siguienteId: Number(localStorage.getItem('siguienteId')) || 3,
+      sucursal: localStorage.getItem('store_code') || '', // ← obtiene sucursal activa
+      productos: [],
+      siguienteId: Number(localStorage.getItem('siguienteId')) || 4,
       modalActivo: false,
       modalCategoriaActivo: false,
       productoSeleccionado: null,
@@ -147,90 +128,164 @@ export default {
       categoriaSeleccionada: '',
       productosFiltrados: [],
       categorias: JSON.parse(localStorage.getItem('categorias')) || ['Ropa', 'Electrónica']
-    };
+    }
   },
   computed: {
     categoriasUnicas() {
-      // Unificar categorías en productos y categorías creadas para filtro
-      const categoriasDeProductos = this.productos.map(p => p.categoria);
-      const todasCategorias = new Set([...categoriasDeProductos, ...this.categorias]);
-      return Array.from(todasCategorias);
+      const categoriasDeProductos = this.productos.map(p => p.categoria)
+      const todasCategorias = new Set([...categoriasDeProductos, ...this.categorias])
+      return Array.from(todasCategorias)
     }
   },
   created() {
-    this.productosFiltrados = this.productos;
+    // Obtener o asignar sucursal activa
+    let storeCode = localStorage.getItem('store_code')
+    if (!storeCode) {
+      // Si no hay store_code, asignamos uno por defecto (ejemplo: 'SUCURSAL1')
+      storeCode = 'SUCURSAL1'
+      localStorage.setItem('store_code', storeCode)
+    }
+    this.sucursal = storeCode
+
+    // Obtener productos guardados
+    let todosLosProductos = JSON.parse(localStorage.getItem('productos')) || []
+
+    // Si no hay productos, cargar productos de prueba
+    if (todosLosProductos.length === 0) {
+      todosLosProductos = [
+        {
+          id: 1,
+          nombre: 'Camiseta Verde',
+          categoria: 'Ropa',
+          precio: 199.99,
+          stock: 10,
+          imagen: 'https://m.media-amazon.com/images/I/51tc2UgRMXL._AC_UF894,1000_QL80_.jpg',
+          sucursal: 'SUCURSAL1'
+        },
+        {
+          id: 2,
+          nombre: 'Auriculares Bluetooth',
+          categoria: 'Electrónica',
+          precio: 599.5,
+          stock: 5,
+          imagen: 'https://mobomx.vtexassets.com/arquivos/ids/196876-800-auto?v=638212067600330000&width=800&height=auto&aspect=true',
+          sucursal: 'SUCURSAL2'
+        },
+        {
+          id: 3,
+          nombre: 'Zapatos Negros',
+          categoria: 'Ropa',
+          precio: 899.99,
+          stock: 7,
+          imagen: 'https://s3-us-west-1.amazonaws.com/calzzapato/zoom/09H6YN-2.jpg',
+          sucursal: 'SUCURSAL3'
+        }
+      ]
+      localStorage.setItem('productos', JSON.stringify(todosLosProductos))
+      localStorage.setItem('siguienteId', '4')
+    }
+
+    // Actualizar productos en localStorage (por si hay sucursales antiguas)
+    todosLosProductos = todosLosProductos.map(p => {
+      if (p.sucursal === 'CENTRO') p.sucursal = 'SUCURSAL1'
+      else if (p.sucursal === 'NORTE') p.sucursal = 'SUCURSAL2'
+      else if (p.sucursal === 'SUR') p.sucursal = 'SUCURSAL3'
+      return p
+    })
+    localStorage.setItem('productos', JSON.stringify(todosLosProductos))
+
+    // Filtrar solo productos de la sucursal activa
+    this.productos = todosLosProductos.filter(p => p.sucursal === this.sucursal)
+    this.aplicarFiltro()
   },
   methods: {
     agregarProducto() {
-      this.productoSeleccionado = null;
-      this.formulario = { nombre: '', categoria: '', precio: 0, stock: 0, imagen: '' };
-      this.modalActivo = true;
+      this.productoSeleccionado = null
+      this.formulario = { nombre: '', categoria: '', precio: 0, stock: 0, imagen: '' }
+      this.modalActivo = true
     },
     abrirModalCategoria() {
-      this.formCategoria = { nombre: '' };
-      this.modalCategoriaActivo = true;
+      this.formCategoria = { nombre: '' }
+      this.modalCategoriaActivo = true
     },
     guardarCategoria() {
-      const nombre = this.formCategoria.nombre.trim();
+      const nombre = this.formCategoria.nombre.trim()
       if (nombre && !this.categorias.includes(nombre)) {
-        this.categorias.push(nombre);
-        localStorage.setItem('categorias', JSON.stringify(this.categorias));
-        this.modalCategoriaActivo = false;
+        this.categorias.push(nombre)
+        localStorage.setItem('categorias', JSON.stringify(this.categorias))
+        this.modalCategoriaActivo = false
       } else {
-        alert('La categoría ya existe o el nombre es inválido.');
+        alert('La categoría ya existe o el nombre es inválido.')
       }
     },
     cancelarCategoria() {
-      this.modalCategoriaActivo = false;
+      this.modalCategoriaActivo = false
     },
     editarProducto(id) {
-      this.productoSeleccionado = id;
-      const producto = this.productos.find(p => p.id === id);
-      this.formulario = { ...producto };
-      this.modalActivo = true;
+      this.productoSeleccionado = id
+      const producto = this.productos.find(p => p.id === id)
+      this.formulario = { ...producto }
+      this.modalActivo = true
     },
     guardarCambios() {
+      let todosLosProductos = JSON.parse(localStorage.getItem('productos')) || []
+
       if (this.productoSeleccionado === null) {
-        this.productos.push({ id: this.siguienteId++, ...this.formulario });
-        localStorage.setItem('siguienteId', this.siguienteId);
+        const nuevoProducto = {
+          id: this.siguienteId++,
+          ...this.formulario,
+          sucursal: this.sucursal
+        }
+        todosLosProductos.push(nuevoProducto)
       } else {
-        const index = this.productos.findIndex(p => p.id === this.productoSeleccionado);
+        const index = todosLosProductos.findIndex(p => p.id === this.productoSeleccionado)
         if (index !== -1) {
-          this.productos[index] = { id: this.productoSeleccionado, ...this.formulario };
+          todosLosProductos[index] = {
+            id: this.productoSeleccionado,
+            ...this.formulario,
+            sucursal: this.sucursal
+          }
         }
       }
-      this.modalActivo = false;
-      this.guardarProductos();
+
+      localStorage.setItem('siguienteId', this.siguienteId)
+      localStorage.setItem('productos', JSON.stringify(todosLosProductos))
+      this.modalActivo = false
+      this.refrescarProductos()
     },
     eliminarProducto(id) {
       if (confirm('¿Seguro que deseas eliminar este producto?')) {
-        this.productos = this.productos.filter(p => p.id !== id);
-        this.guardarProductos();
+        let todosLosProductos = JSON.parse(localStorage.getItem('productos')) || []
+        todosLosProductos = todosLosProductos.filter(p => p.id !== id)
+        localStorage.setItem('productos', JSON.stringify(todosLosProductos))
+        this.refrescarProductos()
       }
     },
     cancelarEdicion() {
-      this.modalActivo = false;
+      this.modalActivo = false
     },
-    guardarProductos() {
-      localStorage.setItem('productos', JSON.stringify(this.productos));
-      this.aplicarFiltro();
+    refrescarProductos() {
+      const todosLosProductos = JSON.parse(localStorage.getItem('productos')) || []
+      this.productos = todosLosProductos.filter(p => p.sucursal === this.sucursal)
+      this.aplicarFiltro()
     },
     aplicarFiltro() {
-      const termino = this.terminoBusqueda.toLowerCase().trim();
+      const termino = this.terminoBusqueda.toLowerCase().trim()
       this.productosFiltrados = this.productos.filter(p => {
-        const coincideNombre = p.nombre.toLowerCase().includes(termino);
+        const coincideNombre = p.nombre.toLowerCase().includes(termino)
         const coincideCategoria = this.categoriaSeleccionada
           ? p.categoria === this.categoriaSeleccionada
-          : true;
-        return coincideNombre && coincideCategoria;
-      });
+          : true
+        return coincideNombre && coincideCategoria
+      })
     },
     filtrarPorCategoria() {
-      this.aplicarFiltro();
+      this.aplicarFiltro()
     }
   }
-};
+}
 </script>
+
 
 <style scoped>
 /* Tu CSS sin cambios */

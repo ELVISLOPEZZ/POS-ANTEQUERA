@@ -29,6 +29,16 @@
           />
         </div>
 
+        <div class="input-group">
+          <label for="sucursal">Selecciona una sucursal</label>
+          <select id="sucursal" v-model="sucursalSeleccionada" required>
+            <option disabled value="">-- Elige una sucursal --</option>
+            <option value="SUCURSAL1">Sucursal 1</option>
+            <option value="SUCURSAL2">Sucursal 2</option>
+            <option value="SUCURSAL3">Sucursal 3</option>
+          </select>
+        </div>
+
         <button type="submit" class="btn-login">Iniciar Sesión</button>
         <p v-if="error" class="error-message">{{ error }}</p>
       </form>
@@ -45,6 +55,7 @@ export default {
     return {
       username: '',
       password: '',
+      sucursalSeleccionada: '',
       error: ''
     }
   },
@@ -52,8 +63,16 @@ export default {
     handleLogin() {
       const acceso = login(this.username, this.password)
       if (acceso) {
+        if (!this.sucursalSeleccionada) {
+          this.error = 'Debes seleccionar una sucursal'
+          return
+        }
+
+        // Guardar la nueva sucursal en localStorage
+        localStorage.setItem('store_code', this.sucursalSeleccionada)
+
         this.error = ''
-        this.$router.push('/caja')
+        this.$router.push('/caja') // Redirige a la vista principal
       } else {
         this.error = 'Credenciales incorrectas. Intenta de nuevo.'
       }
@@ -61,6 +80,7 @@ export default {
   }
 }
 </script>
+
 
 <style scoped>
 /* Reseteo solo para este componente */
