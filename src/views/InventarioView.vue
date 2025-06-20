@@ -2,6 +2,15 @@
   <div class="inventario">
     <h1>Inventario</h1>
 
+<div v-if="alertaActiva" class="alerta-visual">
+  ⚠️ Alerta: Los siguientes productos tienen bajo inventario:
+  <ul>
+    <li v-for="p in productosBajoStock" :key="p.id">
+      • {{ p.nombre }} (Stock: {{ p.stock }})
+    </li>
+  </ul>
+</div>
+
     <div class="botones-superior">
       <button class="btn-agregar" @click="agregarProducto">➕ Agregar Producto</button>
       <button class="btn-agregar" @click="abrirModalCategoria">📁 Añadir Categoría</button>
@@ -73,6 +82,14 @@
               <label for="stock">Stock</label>
               <input id="stock" v-model.number="formulario.stock" type="number" min="0" required />
             </div>
+            <div class="form-row">
+              <label for="codigoBarras">Codigo de Barras</label>
+              <input id="codigoBarras" v-model.number="formulario.codigoBarras" type="number" min="0" max="13" required />
+            </div>
+            <div class="form-row">
+              <label for="fechaCaducidad">Caducidaad</label>
+              <input id="fechaCaducidad" v-model="formulario.fechaCaducidad" type="date" required />
+            </div>
             <div class="form-row form-row-full">
               <label for="imagen">URL de imagen</label>
               <input id="imagen" v-model="formulario.imagen" />
@@ -112,7 +129,10 @@
   </div>
 </template>
 
+
+
 <script>
+import { obtenerProductosPorSucursal } from '../productos.js'
 export default {
   data() {
     return {
@@ -127,6 +147,9 @@ export default {
       terminoBusqueda: '',
       categoriaSeleccionada: '',
       productosFiltrados: [],
+      fechaCaducidad: '',
+      alertaActiva: false,
+      productosBajoStock: [],
       categorias: JSON.parse(localStorage.getItem('categorias')) || ['Ropa', 'Electrónica']
     }
   },
@@ -146,59 +169,19 @@ export default {
       localStorage.setItem('store_code', storeCode)
     }
     this.sucursal = storeCode
-
-    // Obtener productos guardados
-    let todosLosProductos = JSON.parse(localStorage.getItem('productos')) || []
-
-    // Si no hay productos, cargar productos de prueba
-    if (todosLosProductos.length === 0) {
-      todosLosProductos = [
-        {
-          id: 1,
-          nombre: 'Camiseta Verde',
-          categoria: 'Ropa',
-          precio: 199.99,
-          stock: 10,
-          imagen: 'https://m.media-amazon.com/images/I/51tc2UgRMXL._AC_UF894,1000_QL80_.jpg',
-          sucursal: 'SUCURSAL1'
-        },
-        {
-          id: 2,
-          nombre: 'Auriculares Bluetooth',
-          categoria: 'Electrónica',
-          precio: 599.5,
-          stock: 5,
-          imagen: 'https://mobomx.vtexassets.com/arquivos/ids/196876-800-auto?v=638212067600330000&width=800&height=auto&aspect=true',
-          sucursal: 'SUCURSAL2'
-        },
-        {
-          id: 3,
-          nombre: 'Zapatos Negros',
-          categoria: 'Ropa',
-          precio: 899.99,
-          stock: 7,
-          imagen: 'https://s3-us-west-1.amazonaws.com/calzzapato/zoom/09H6YN-2.jpg',
-          sucursal: 'SUCURSAL3'
-        }
-      ]
-      localStorage.setItem('productos', JSON.stringify(todosLosProductos))
-      localStorage.setItem('siguienteId', '4')
-    }
-
-    // Actualizar productos en localStorage (por si hay sucursales antiguas)
-    todosLosProductos = todosLosProductos.map(p => {
-      if (p.sucursal === 'CENTRO') p.sucursal = 'SUCURSAL1'
-      else if (p.sucursal === 'NORTE') p.sucursal = 'SUCURSAL2'
-      else if (p.sucursal === 'SUR') p.sucursal = 'SUCURSAL3'
-      return p
-    })
-    localStorage.setItem('productos', JSON.stringify(todosLosProductos))
-
-    // Filtrar solo productos de la sucursal activa
-    this.productos = todosLosProductos.filter(p => p.sucursal === this.sucursal)
+    this.productos = obtenerProductosPorSucursal(this.sucursal)
     this.aplicarFiltro()
-  },
+    this.verificarBajoInventario()
+    },
   methods: {
+
+verificarBajoInventario() {
+  const umbral = 5
+  this.productosBajoStock = this.productos.filter(p => p.stock <= umbral)
+  this.alertaActiva = this.productosBajoStock.length > 0
+  // Si quieres ocultar la alerta automáticamente después de unos segundos:
+},
+
     agregarProducto() {
       this.productoSeleccionado = null
       this.formulario = { nombre: '', categoria: '', precio: 0, stock: 0, imagen: '' }
@@ -268,6 +251,8 @@ export default {
       const todosLosProductos = JSON.parse(localStorage.getItem('productos')) || []
       this.productos = todosLosProductos.filter(p => p.sucursal === this.sucursal)
       this.aplicarFiltro()
+      this.verificarBajoInventario()
+
     },
     aplicarFiltro() {
       const termino = this.terminoBusqueda.toLowerCase().trim()
@@ -286,7 +271,6 @@ export default {
 }
 </script>
 
-
 <style scoped>
 /* Tu CSS sin cambios */
 .inventario {
@@ -294,6 +278,17 @@ export default {
   padding: 2rem;
   background-color: #f4f7f9;
   min-height: 100vh;
+}
+
+/* 2) Estilo solo para el título “Inventario” */
+.inventario h1 {
+  font-family: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-weight: 700;          /* Negrita elegante */
+  font-size: 2.4rem;         /* Más grande y legible */
+  letter-spacing: 0.5px;     /* Ligero espaciado */
+  color: #2c3e50;            /* Mantén tu color corporativo */
+  margin-bottom: 1.2rem;     /* Separación con los controles */
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); /* Sombra sutil */
 }
 
 h1 {
@@ -366,7 +361,7 @@ h1 {
 
 .card h3 {
   margin-bottom: 0.3rem;
-  color: #2d3748;
+  color: #482d2d;
 }
 
 .card p {
@@ -376,7 +371,7 @@ h1 {
 
 .acciones button {
   margin: 0.3rem;
-  background-color: #718096;
+  background-color: #0066ff;
   color: white;
   border: none;
   padding: 0.5rem 0.9rem;
@@ -386,9 +381,15 @@ h1 {
   transition: background-color 0.2s;
 }
 
-.acciones button:hover {
-  background-color: #4a5568;
+.acciones button:first-child:hover {
+  background-color: #2980b9;
 }
+
+.acciones button:last-child {
+  background-color: #e74c3c;
+  color: white;
+}
+
 
 .modal {
   position: fixed;
@@ -470,5 +471,68 @@ h1 {
   border-radius: 8px;
   border: none;
   cursor: pointer;
+}
+
+.alerta {
+  background-color: #ffeeba;
+  color: #856404;
+  border: 1px solid #f5c6cb;
+  border-left: 8px solid #ffc107;
+  border-radius: 8px;
+  padding: 1rem 1.5rem;
+  margin: 1rem 0;
+  font-size: 1rem;
+  font-weight: 500;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+  animation: aparecer 0.3s ease-out;
+  position: relative;
+}
+
+.alerta::before {
+  content: "⚠️ ";
+  margin-right: 0.5rem;
+  font-size: 1.2rem;
+}
+
+@keyframes aparecer {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.alerta-visual {
+  background-color: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeeba;
+  border-left: 8px solid #ffc107;
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  font-size: 1rem;
+  font-weight: 500;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+  animation: aparecer 0.3s ease-out;
+}
+
+.alerta-visual ul {
+  margin: 0.5rem 0 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+@keyframes aparecer {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>

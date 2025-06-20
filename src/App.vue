@@ -5,19 +5,28 @@
 
       <nav class="nav-botones">
         <button @click="irA('Caja')" :class="{ activo: vista === 'Caja' }">Caja</button>
-        <button @click="irA('Inventario')" :class="{ activo: vista === 'Inventario' }">Inventario</button>
-        <button @click="irA('Reportes')" :class="{ activo: vista === 'Reportes' }">Reportes</button>
+        <button @click="irA('Creditos')" :class="{ activo: vista === 'Creditos' }">Creditos</button>
+        <button v-if="rolUsuario === 'admin'"@click="irA('Inventario')" :class="{ activo: vista === 'Inventario' }">Inventario</button>
+        <button v-if="rolUsuario === 'admin'"@click="irA('Reportes')" :class="{ activo: vista === 'Reportes' }">Reportes</button>
+        <button v-if="rolUsuario === 'admin'"@click="irA('Administrador')" :class="{ activo: vista === 'Administrador' }">Administrador</button>
         <button @click="cerrarSesion" class="btn-logout">Cerrar sesión</button>
       </nav>
     </header>
 
     <main class="contenido">
-      <router-view v-if="!logueado" />
+      <router-view v-if="!logueado" @login-exitoso="onLoginExitoso" />
+      
       <div v-else>
         <CajaView
           v-if="vista === 'Caja'"
+          ref="cajaViewComponent"
           :sucursal="sucursalActual"
           @nueva-venta="agregarVenta"
+        />
+          <Creditosview
+          v-if="vista === 'Creditos'"
+          ref="creditosviewComponent"
+          :sucursal="sucursalActual"
         />
         <InventarioView
           v-else-if="vista === 'Inventario'"
@@ -28,10 +37,13 @@
           :ventas="ventas"
           :sucursal="sucursalActual"
         />
+        <AdministradorView
+        v-else-if="vista === 'Administrador'"
+        />
       </div>
     </main>
 
-    <!-- Modal de Confirmación -->
+    <!-- Modal de Confirmación de Cierre de Sesión -->
     <div v-if="mostrarAlerta" class="modal-overlay">
       <div class="modal-contenido">
         <div class="modal-icono">⚠️</div>
@@ -43,21 +55,37 @@
         </div>
       </div>
     </div>
+
+    <!-- Modal de Confirmación de Corte del Día -->
+    <div v-if="mostrarCorteConfirmado" class="modal-overlay">
+      <div class="modal-contenido">
+        <div class="modal-icono">✅</div>
+        <h2 class="modal-titulo">¡Corte del día realizado!</h2>
+        <p class="modal-texto">Se guardaron los datos del día correctamente.</p>
+        <div class="modal-botones">
+          <button @click="finalizarCorte" class="btn-confirmar">Aceptar</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
 import CajaView from './views/CajaView.vue'
+import Creditosview from './views/Creditosview.vue'
 import InventarioView from './views/InventarioView.vue'
 import ReportesView from './views/ReportesView.vue'
+import AdministradorView from './views/AdministradorView.vue'
 import { logout, isLoggedIn } from './auth.js'
 
 export default {
   name: 'App',
   components: {
     CajaView,
+    Creditosview,
     InventarioView,
-    ReportesView
+    ReportesView,
+    AdministradorView,
   },
   data() {
     return {
@@ -65,7 +93,9 @@ export default {
       ventas: [],
       logueado: false,
       mostrarAlerta: false,
-      sucursalActual: '' // ✅ NUEVA VARIABLE
+      mostrarCorteConfirmado: false,
+      sucursalActual: '',
+      rolUsuario: ''
     }
   },
   methods: {
@@ -79,15 +109,33 @@ export default {
       this.mostrarAlerta = true
     },
     confirmarCerrarSesion() {
-      logout()
+      // Cierra caja sin alert
+      if (this.$refs.cajaViewComponent?.cerrarCaja) {
+        this.$refs.cajaViewComponent.cerrarCaja()
+      }
       this.mostrarAlerta = false
+      this.mostrarCorteConfirmado = true
+    },
+    finalizarCorte() {
+      // Cerrar sesión después del corte
+      logout()
+      this.mostrarCorteConfirmado = false
       this.logueado = false
       this.sucursalActual = ''
+      this.rolUsuario = ''
       localStorage.removeItem('store_code')
+      localStorage.removeItem('rol_usuario')
       this.$router.push('/')
     },
     cancelarCerrarSesion() {
       this.mostrarAlerta = false
+    },
+    onLoginExitoso(usuario) {
+      this.logueado = true
+      this.sucursalActual = localStorage.getItem('store_code') || ''
+      this.rolUsuario = usuario.rol || ''
+      this.vista = 'Caja'
+      this.$router.push('/caja')
     }
   },
   created() {
@@ -96,6 +144,7 @@ export default {
       this.$router.push('/')
     } else {
       this.sucursalActual = localStorage.getItem('store_code') || ''
+      this.rolUsuario = localStorage.getItem('rol_usuario') || ''
     }
   },
   watch: {

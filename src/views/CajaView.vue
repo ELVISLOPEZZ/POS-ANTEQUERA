@@ -1,6 +1,7 @@
 <template>
   <div class="caja-view">
     <h1 class="titulo">Caja de Cobro</h1>
+    
 
     <section class="productos">
       <h2>Productos disponibles</h2>
@@ -28,18 +29,24 @@
     </section>
 
     <!-- Input para escanear código de barras -->
-    <div class="lector-codigo">
-      <label for="codigoBarra">Escanear Código de Barras:</label>
-      <input
-        id="codigoBarra"
-        v-model="codigoEscaneado"
-        @keyup.enter="procesarEscaneo"
-        placeholder="Escanea o escribe el código y presiona Enter"
-        ref="inputCodigo"
-        @blur="reenfocarInput"
-        autofocus
-      />
-    </div>
+<div class="lector-codigo">
+  <label for="codigoBarra">Escanear Código de Barras:</label>
+  <input
+    id="codigoBarra"
+    v-model="codigoEscaneado"
+    type="text"
+    inputmode="numeric"
+    pattern="\d*"
+    maxlength="13"
+    @input="filtrarNumeros"
+    @keyup.enter="procesarEscaneo"
+    placeholder="Escanea o escribe el código y presiona Enter"
+    ref="inputCodigo"
+    @blur="reenfocarInput"
+    autofocus
+  />
+</div>
+
 
     <section class="carrito">
       <h2>Carrito</h2>
@@ -70,6 +77,10 @@
           Tarjeta
         </label>
       </div>
+
+      <div v-if="totalAcumulado > 0" class="recuadro-total-acumulado">
+  <p><strong>Total acumulado del día:</strong> ${{ totalAcumulado.toFixed(2) }}</p>
+</div>
 
       <button
         @click="finalizarVenta"
@@ -108,6 +119,9 @@ export default {
       carritoAnterior: [],
       metodoPagoAnterior: '',
       totalAnterior: 0,
+      totalAcumulado: 0,
+      cierresCaja: [],
+      ventasRealizadas: []  // Agregado para controlar ventas del día
     };
   },
   computed: {
@@ -118,14 +132,34 @@ export default {
   mounted() {
     this.fetchInventario();
 
-    // Enfocar el input al cargar la vista
+    const fechaGuardada = localStorage.getItem('fecha_total_acumulado');
+    const totalGuardado = localStorage.getItem('total_acumulado_dia');
+    const cierresGuardados = localStorage.getItem('cierres_caja');
+
+    const hoy = new Date().toISOString().slice(0, 10);
+
+    if (fechaGuardada !== hoy) {
+      // Día nuevo, reiniciar acumulados y cargar cierres previos
+      this.totalAcumulado = 0;
+      this.ventasRealizadas = [];
+      if (cierresGuardados) {
+        this.cierresCaja = JSON.parse(cierresGuardados);
+      }
+      localStorage.setItem('fecha_total_acumulado', hoy);
+      localStorage.setItem('total_acumulado_dia', '0');
+    } else {
+      // Mismo día, cargar datos guardados
+      this.totalAcumulado = totalGuardado ? parseFloat(totalGuardado) : 0;
+      this.ventasRealizadas = JSON.parse(localStorage.getItem('ventas_realizadas')) || [];
+      this.cierresCaja = cierresGuardados ? JSON.parse(cierresGuardados) : [];
+    }
+
     this.$nextTick(() => {
       this.$refs.inputCodigo?.focus();
     });
-
-    // Agregar listener para Escape (opcional)
     window.addEventListener('keydown', this.detectarEscape);
   },
+
   beforeUnmount() {
     window.removeEventListener('keydown', this.detectarEscape);
   },
@@ -142,18 +176,10 @@ export default {
             id: 1,
             nombre: 'AGUA',
             precio: 25,
-            stock: 10,
+            stock: 20,
             codigo: '758104005796',
             imagen: 'https://superfarmaciasbali.com/cdn/shop/files/Bonafont1L.jpg?v=1717198870'
           },
-          {
-            id: 2,
-            nombre: 'MAYONESA',
-            precio: 25,
-            stock: 10,
-            codigo: '7501003300652',
-            imagen: 'https://d1zc67o3u1epb0.cloudfront.net/media/catalog/product/7/5/7501003300652.1_1.jpg?width=265&height=390&store=default&image-type=image'
-          }
         ];
       }
     },
@@ -187,6 +213,7 @@ export default {
       item.cantidad = nuevaCantidad;
     },
     finalizarVenta() {
+      // Actualizar stock de productos
       this.carrito.forEach(item => {
         const prod = this.productos.find(p => p.id === item.id);
         if (prod) prod.stock -= item.cantidad;
@@ -200,16 +227,49 @@ export default {
         fecha: new Date().toISOString()
       };
 
+      // Guardar venta en arreglo y localStorage
+      this.ventasRealizadas.push(venta);
+      localStorage.setItem('ventas_realizadas', JSON.stringify(this.ventasRealizadas));
+
+      // Acumular total y guardar
+      this.totalAcumulado += this.total;
+      localStorage.setItem('total_acumulado_dia', this.totalAcumulado.toString());
+
+      // Guardar fecha para reiniciar luego
+      const hoy = new Date().toISOString().slice(0, 10);
+      localStorage.setItem('fecha_total_acumulado', hoy);
+
+      // Emitir evento para App.vue
       this.$emit('nueva-venta', venta);
 
+      // Guardar datos para mostrar el ticket
       this.carritoAnterior = [...this.carrito];
       this.totalAnterior = this.total;
       this.metodoPagoAnterior = this.metodoPago;
       this.ventaFinalizada = true;
 
+      // Vaciar carrito y limpiar código
       this.carrito = [];
       this.codigoEscaneado = '';
     },
+cerrarCaja() {
+  const cierre = {
+    fecha: new Date().toISOString().slice(0, 10),
+    totalVentas: this.totalAcumulado,
+    ventas: [...this.ventasRealizadas],
+    cajero: localStorage.getItem('usuario_logueado') || 'Sin nombre'
+  };
+
+  this.cierresCaja.push(cierre);
+  localStorage.setItem('cierres_caja', JSON.stringify(this.cierresCaja));
+
+  this.totalAcumulado = 0;
+  this.ventasRealizadas = [];
+  localStorage.setItem('ventas_realizadas', '[]');
+  localStorage.setItem('total_acumulado_dia', '0');
+  localStorage.setItem('fecha_total_acumulado', cierre.fecha);
+},
+
     imprimirTicket() {
       const original = document.body.innerHTML;
       const ticket = document.getElementById('ticket').innerHTML;
@@ -244,11 +304,37 @@ export default {
       }
     }
   }
-};
+}
+
 </script>
 
 
 <style scoped>
+
+.caja-view h1 {
+  text-align: center;
+  font-family: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-weight: 700;          /* Negrita elegante */
+  font-size: 2.4rem;         /* Más grande y legible */
+  letter-spacing: 0.5px;     /* Ligero espaciado */
+  color: #2c3e50;            /* Mantén tu color corporativo */
+  margin-bottom: 1.2rem;     /* Separación con los controles */
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); /* Sombra sutil */
+}
+
+.recuadro-total-acumulado {
+  margin-top: 1rem;
+  background-color: #f1f8e9;
+  border: 2px solid #aed581;
+  border-radius: 10px;
+  padding: 1rem;
+  color: #33691e;
+  font-size: 1.2rem;
+  text-align: center;
+  font-weight: bold;
+}
+
+
 .caja-view {
   max-width: 900px;
   margin: auto;
@@ -257,14 +343,6 @@ export default {
   background: #f9f9f9;
   border-radius: 8px;
   box-shadow: 0 0 15px rgba(0,0,0,0.1);
-}
-
-.titulo {
-  text-align: center;
-  color: #2e7d32;
-  margin-bottom: 2rem;
-  font-weight: 700;
-  font-size: 2rem;
 }
 
 .lector-codigo {

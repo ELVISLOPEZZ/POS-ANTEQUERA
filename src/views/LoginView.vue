@@ -60,30 +60,27 @@ export default {
     }
   },
   methods: {
-    handleLogin() {
-      const acceso = login(this.username, this.password)
-      if (acceso) {
-        if (!this.sucursalSeleccionada) {
-          this.error = 'Debes seleccionar una sucursal'
-          return
-        }
+handleLogin() {
+  if (!this.sucursalSeleccionada) {
+    this.error = 'Debes seleccionar una sucursal';
+    return;
+  }
+  const result = login(this.username, this.password, this.sucursalSeleccionada);
+  if (result.success) {
+    this.error = '';
+    this.$emit('login-exitoso', result.user);
+    this.$router.push('/caja'); // Redirige a la vista principal
+  } else {
+    this.error = result.message; 
+  }
+}
 
-        // Guardar la nueva sucursal en localStorage
-        localStorage.setItem('store_code', this.sucursalSeleccionada)
-
-        this.error = ''
-        this.$router.push('/caja') // Redirige a la vista principal
-      } else {
-        this.error = 'Credenciales incorrectas. Intenta de nuevo.'
-      }
-    }
   }
 }
 </script>
 
 
 <style scoped>
-/* Reseteo solo para este componente */
 :deep(html),
 :deep(body) {
   margin: 0;
@@ -158,7 +155,8 @@ export default {
   color: #5d4037;
 }
 
-.input-group input {
+.input-group input,
+.input-group select {
   width: 100%;
   padding: 0.75rem 1rem;
   border: 1.5px solid #d7ccc8;
@@ -167,7 +165,8 @@ export default {
   transition: border-color 0.3s, box-shadow 0.3s;
 }
 
-.input-group input:focus {
+.input-group input:focus,
+.input-group select:focus {
   border-color: #a1887f;
   outline: none;
   box-shadow: 0 0 0 3px rgba(161, 136, 127, 0.2);

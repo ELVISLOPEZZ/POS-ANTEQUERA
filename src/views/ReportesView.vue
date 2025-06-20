@@ -96,6 +96,15 @@ export default {
 </script>
 
 <style scoped>
+.reporte-ventas h1 {
+  font-family: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-weight: 700;          /* Negrita elegante */
+  font-size: 2.4rem;         /* Más grande y legible */
+  letter-spacing: 0.5px;     /* Ligero espaciado */
+  color: #2c3e50;            /* Mantén tu color corporativo */
+  margin-bottom: 1.2rem;     /* Separación con los controles */
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); /* Sombra sutil */
+}
 table {
   width: 100%;
   border-collapse: collapse;
