@@ -177,88 +177,134 @@ export default {
 </script>
 
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+
 .admin-view {
-  max-width: 800px;
+  max-width: 900px;
   margin: auto;
   padding: 2rem;
-  font-family: Arial, sans-serif;
-}
-.formulario {
-  background: #f2f2f2;
-  padding: 1rem;
+  font-family: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: #f9f9f9;
   border-radius: 8px;
+  box-shadow: 0 0 15px rgba(0,0,0,0.1);
+}
+
+.admin-view h1 {
+  text-align: center;
+  font-weight: 700;
+  font-size: 2.2rem;
+  color: #2c3e50;
+  margin-bottom: 1.5rem;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.formulario {
+  background: #f1f8e9;
+  padding: 1.5rem;
+  border-radius: 10px;
+  border: 2px solid #aed581;
   margin-bottom: 2rem;
 }
+
 .campo {
   margin-bottom: 1rem;
 }
+
 .campo label {
   display: block;
-  font-weight: bold;
-  margin-bottom: 0.3rem;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+  color: #2e7d32;
 }
+
 .campo input,
 .campo select {
   width: 100%;
-  padding: 0.5rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+  padding: 0.6rem 0.9rem;
+  font-size: 1rem;
+  border: 2px solid #c8e6c9;
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.3s ease;
 }
+.campo input:focus,
+.campo select:focus {
+  border-color: #4caf50;
+}
+
 .btn-guardar {
-  background: #2e7d32;
+  background: #4caf50;
   color: white;
+  font-weight: bold;
+  padding: 0.7rem 1.4rem;
   border: none;
-  padding: 0.7rem 1.2rem;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
+  transition: background-color 0.3s ease;
 }
 .btn-guardar:hover {
-  background: #1b5e20;
+  background: #2e7d32;
 }
+
 .tabla-usuarios {
   width: 100%;
   border-collapse: collapse;
+  background: white;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.1);
 }
 .tabla-usuarios th,
 .tabla-usuarios td {
-  border: 1px solid #ccc;
-  padding: 0.8rem;
+  padding: 1rem;
   text-align: center;
+  border-bottom: 1px solid #eee;
 }
 .tabla-usuarios th {
-  background: #e0e0e0;
+  background: #e8f5e9;
+  color: #2e7d32;
+  font-weight: 600;
 }
+.tabla-usuarios tr:last-child td {
+  border-bottom: none;
+}
+
 .btn-eliminar {
-  background: #d32f2f;
+  background: #e53935;
   color: white;
   border: none;
-  padding: 0.4rem 0.8rem;
-  border-radius: 4px;
+  padding: 0.5rem 1rem;
+  border-radius: 5px;
   cursor: pointer;
   margin-right: 0.5rem;
+  transition: background-color 0.3s ease;
 }
 .btn-eliminar:hover {
   background: #b71c1c;
 }
 .btn-editar {
-  background: #1976d2;
+  background: #42a5f5;
   color: white;
   border: none;
-  padding: 0.4rem 0.8rem;
-  border-radius: 4px;
+  padding: 0.5rem 1rem;
+  border-radius: 5px;
   cursor: pointer;
+  transition: background-color 0.3s ease;
 }
 .btn-editar:hover {
   background: #0d47a1;
 }
+
 .mensaje {
   margin-top: 1rem;
   background: #c8e6c9;
-  padding: 0.5rem;
-  border-radius: 4px;
+  padding: 0.8rem;
+  border-radius: 6px;
   color: #256029;
   text-align: center;
+  font-weight: bold;
 }
+
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -269,31 +315,45 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
+  z-index: 999;
 }
+
 .modal-contenido {
   background: white;
   padding: 2rem;
-  border-radius: 8px;
+  border-radius: 10px;
+  width: 90%;
+  max-width: 500px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
   text-align: center;
 }
-.modal-botones {
-  margin-top: 1rem;
+
+.modal-contenido h2 {
+  color: #2e7d32;
+  margin-bottom: 1rem;
 }
+
+.modal-botones {
+  margin-top: 1.5rem;
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+
 .btn-confirmar {
   background: #388e3c;
   color: white;
-  padding: 0.6rem 1rem;
+  padding: 0.6rem 1.2rem;
   border: none;
-  margin-right: 1rem;
-  border-radius: 4px;
+  border-radius: 5px;
   cursor: pointer;
 }
 .btn-cancelar {
   background: #757575;
   color: white;
-  padding: 0.6rem 1rem;
+  padding: 0.6rem 1.2rem;
   border: none;
-  border-radius: 4px;
+  border-radius: 5px;
   cursor: pointer;
 }
 </style>

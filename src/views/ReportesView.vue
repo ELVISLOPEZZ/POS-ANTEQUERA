@@ -96,41 +96,75 @@ export default {
 </script>
 
 <style scoped>
-.reporte-ventas h1 {
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+
+.reporte-ventas {
+  max-width: 1000px;
+  margin: auto;
+  padding: 2rem;
   font-family: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  font-weight: 700;          /* Negrita elegante */
-  font-size: 2.4rem;         /* Más grande y legible */
-  letter-spacing: 0.5px;     /* Ligero espaciado */
-  color: #2c3e50;            /* Mantén tu color corporativo */
-  margin-bottom: 1.2rem;     /* Separación con los controles */
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); /* Sombra sutil */
+  background: #f9f9f9;
+  border-radius: 10px;
+  box-shadow: 0 0 12px rgba(0,0,0,0.08);
 }
+
+.reporte-ventas h1 {
+  font-weight: 700;
+  font-size: 2.4rem;
+  letter-spacing: 0.5px;
+  color: #2c3e50;
+  margin-bottom: 1.5rem;
+  text-align: center;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
   margin-top: 1rem;
+  background-color: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
 }
+
 th, td {
-  border: 1px solid #ddd;
-  padding: 8px;
+  padding: 1rem;
+  text-align: center;
+  border-bottom: 1px solid #e0e0e0;
+  font-size: 0.95rem;
 }
+
 th {
-  background-color: #1976d2;
+  background-color: #2e7d32;
   color: white;
+  font-weight: 600;
+  text-transform: uppercase;
 }
+
+tr:last-child td {
+  border-bottom: none;
+}
+
 .export-buttons {
-  margin-top: 1rem;
+  margin-top: 2rem;
+  text-align: right;
 }
+
 .export-buttons button {
-  margin-right: 1rem;
-  padding: 0.5rem 1rem;
-  background-color: #1976d2;
+  margin-left: 1rem;
+  padding: 0.6rem 1.2rem;
+  background-color: #4caf50;
   color: white;
+  font-weight: bold;
   border: none;
   border-radius: 6px;
   cursor: pointer;
+  transition: background-color 0.3s ease;
 }
+
 .export-buttons button:hover {
-  background-color: #125ea6;
+  background-color: #2e7d32;
 }
 </style>
+

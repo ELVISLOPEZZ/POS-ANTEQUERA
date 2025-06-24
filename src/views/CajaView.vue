@@ -1,7 +1,6 @@
 <template>
   <div class="caja-view">
     <h1 class="titulo">Caja de Cobro</h1>
-    
 
     <section class="productos">
       <h2>Productos disponibles</h2>
@@ -16,10 +15,8 @@
           <div>
             <h3>{{ producto.nombre }}</h3>
             <p class="precio">$ {{ producto.precio.toFixed(2) }}</p>
-            <p class="stock" v-if="producto.stock !== undefined">
-              Stock: {{ producto.stock }}
-            </p>
-            <p class="codigo">Código: {{ producto.codigo }}</p>
+            <p class="stock" v-if="producto.stock !== undefined">Stock: {{ producto.stock }}</p>
+            <p class="codigo">Código: {{ producto.codigoBarras }}</p>
           </div>
         </div>
         <button @click="agregarAlCarrito(producto)" class="btn-agregar" :disabled="producto.stock === 0">
@@ -29,24 +26,22 @@
     </section>
 
     <!-- Input para escanear código de barras -->
-<div class="lector-codigo">
-  <label for="codigoBarra">Escanear Código de Barras:</label>
-  <input
-    id="codigoBarra"
-    v-model="codigoEscaneado"
-    type="text"
-    inputmode="numeric"
-    pattern="\d*"
-    maxlength="13"
-    @input="filtrarNumeros"
-    @keyup.enter="procesarEscaneo"
-    placeholder="Escanea o escribe el código y presiona Enter"
-    ref="inputCodigo"
-    @blur="reenfocarInput"
-    autofocus
-  />
-</div>
-
+    <div class="lector-codigo">
+      <label for="codigoBarra">Escanear Código de Barras:</label>
+      <input
+        id="codigoBarra"
+        v-model="codigoEscaneado"
+        type="text"
+        inputmode="numeric"
+        pattern="\d*"
+        maxlength="13"
+        @keyup.enter="procesarEscaneo"
+        placeholder="Escanea o escribe el código y presiona Enter"
+        ref="inputCodigo"
+        @focus="inputActivo = true"
+        @blur.capture="inputActivo = false"
+      />
+    </div>
 
     <section class="carrito">
       <h2>Carrito</h2>
@@ -56,11 +51,12 @@
         <li v-for="item in carrito" :key="item.id" class="item-carrito">
           <span>{{ item.nombre }}</span>
           <div class="contador-cantidad">
-            <button @click="cambiarCantidad(item, -1)" :disabled="item.cantidad === 1">-</button>
+            <button @click="cambiarCantidad(item, -1)">-</button>
             <span>{{ item.cantidad }}</span>
             <button @click="cambiarCantidad(item, 1)" :disabled="item.cantidad >= item.stock">+</button>
           </div>
           <span class="subtotal">$ {{ (item.precio * item.cantidad).toFixed(2) }}</span>
+          <button class="btn-eliminar" @click="eliminarDelCarrito(item)">🗑</button>
         </li>
       </ul>
 
@@ -79,14 +75,10 @@
       </div>
 
       <div v-if="totalAcumulado > 0" class="recuadro-total-acumulado">
-  <p><strong>Total acumulado del día:</strong> ${{ totalAcumulado.toFixed(2) }}</p>
-</div>
+        <p><strong>Total acumulado del día:</strong> ${{ totalAcumulado.toFixed(2) }}</p>
+      </div>
 
-      <button
-        @click="finalizarVenta"
-        :disabled="carrito.length === 0"
-        class="btn-finalizar"
-      >
+      <button @click="finalizarVenta" :disabled="carrito.length === 0" class="btn-finalizar">
         Finalizar Venta
       </button>
     </section>
@@ -108,6 +100,8 @@
 </template>
 
 <script>
+import { obtenerProductosPorSucursal } from '../productos.js';
+
 export default {
   data() {
     return {
@@ -121,7 +115,8 @@ export default {
       totalAnterior: 0,
       totalAcumulado: 0,
       cierresCaja: [],
-      ventasRealizadas: []  // Agregado para controlar ventas del día
+      ventasRealizadas: [],
+      inputActivo: false
     };
   },
   computed: {
@@ -130,16 +125,19 @@ export default {
     }
   },
   mounted() {
-    this.fetchInventario();
+    const sucursal = localStorage.getItem('store_code');
+    if (sucursal) {
+      this.productos = obtenerProductosPorSucursal(sucursal);
+    } else {
+      alert('Error: No se pudo determinar la sucursal.');
+    }
 
     const fechaGuardada = localStorage.getItem('fecha_total_acumulado');
     const totalGuardado = localStorage.getItem('total_acumulado_dia');
     const cierresGuardados = localStorage.getItem('cierres_caja');
-
     const hoy = new Date().toISOString().slice(0, 10);
 
     if (fechaGuardada !== hoy) {
-      // Día nuevo, reiniciar acumulados y cargar cierres previos
       this.totalAcumulado = 0;
       this.ventasRealizadas = [];
       if (cierresGuardados) {
@@ -148,7 +146,6 @@ export default {
       localStorage.setItem('fecha_total_acumulado', hoy);
       localStorage.setItem('total_acumulado_dia', '0');
     } else {
-      // Mismo día, cargar datos guardados
       this.totalAcumulado = totalGuardado ? parseFloat(totalGuardado) : 0;
       this.ventasRealizadas = JSON.parse(localStorage.getItem('ventas_realizadas')) || [];
       this.cierresCaja = cierresGuardados ? JSON.parse(cierresGuardados) : [];
@@ -157,32 +154,13 @@ export default {
     this.$nextTick(() => {
       this.$refs.inputCodigo?.focus();
     });
+
     window.addEventListener('keydown', this.detectarEscape);
   },
-
   beforeUnmount() {
     window.removeEventListener('keydown', this.detectarEscape);
   },
   methods: {
-    async fetchInventario() {
-      try {
-        const response = await fetch('/api/productos.json');
-        if (!response.ok) throw new Error('Error al obtener productos');
-        this.productos = await response.json();
-      } catch (error) {
-        console.error('Fallo al obtener inventario:', error);
-        this.productos = [
-          {
-            id: 1,
-            nombre: 'AGUA',
-            precio: 25,
-            stock: 20,
-            codigo: '758104005796',
-            imagen: 'https://superfarmaciasbali.com/cdn/shop/files/Bonafont1L.jpg?v=1717198870'
-          },
-        ];
-      }
-    },
     agregarAlCarrito(producto) {
       if (producto.stock === 0) {
         alert('Producto sin stock');
@@ -202,7 +180,10 @@ export default {
     },
     cambiarCantidad(item, delta) {
       const nuevaCantidad = item.cantidad + delta;
-      if (nuevaCantidad < 1) return;
+      if (nuevaCantidad < 1) {
+        this.eliminarDelCarrito(item);
+        return;
+      }
 
       const original = this.productos.find(p => p.id === item.id);
       if (original && nuevaCantidad > original.stock) {
@@ -212,8 +193,12 @@ export default {
 
       item.cantidad = nuevaCantidad;
     },
+    eliminarDelCarrito(item) {
+      if (confirm(`¿Eliminar "${item.nombre}" del carrito?`)) {
+        this.carrito = this.carrito.filter(p => p.id !== item.id);
+      }
+    },
     finalizarVenta() {
-      // Actualizar stock de productos
       this.carrito.forEach(item => {
         const prod = this.productos.find(p => p.id === item.id);
         if (prod) prod.stock -= item.cantidad;
@@ -227,62 +212,81 @@ export default {
         fecha: new Date().toISOString()
       };
 
-      // Guardar venta en arreglo y localStorage
       this.ventasRealizadas.push(venta);
       localStorage.setItem('ventas_realizadas', JSON.stringify(this.ventasRealizadas));
-
-      // Acumular total y guardar
       this.totalAcumulado += this.total;
       localStorage.setItem('total_acumulado_dia', this.totalAcumulado.toString());
 
-      // Guardar fecha para reiniciar luego
       const hoy = new Date().toISOString().slice(0, 10);
       localStorage.setItem('fecha_total_acumulado', hoy);
 
-      // Emitir evento para App.vue
       this.$emit('nueva-venta', venta);
 
-      // Guardar datos para mostrar el ticket
       this.carritoAnterior = [...this.carrito];
       this.totalAnterior = this.total;
       this.metodoPagoAnterior = this.metodoPago;
       this.ventaFinalizada = true;
 
-      // Vaciar carrito y limpiar código
       this.carrito = [];
       this.codigoEscaneado = '';
     },
-cerrarCaja() {
-  const cierre = {
-    fecha: new Date().toISOString().slice(0, 10),
-    totalVentas: this.totalAcumulado,
-    ventas: [...this.ventasRealizadas],
-    cajero: localStorage.getItem('usuario_logueado') || 'Sin nombre'
-  };
+imprimirTicket() {
+  const ticketContent = document.getElementById('ticket').innerHTML;
 
-  this.cierresCaja.push(cierre);
-  localStorage.setItem('cierres_caja', JSON.stringify(this.cierresCaja));
+  const ventana = window.open('', '_blank', 'width=400,height=600');
+  ventana.document.write(`
+    <html>
+      <head>
+        <title>Ticket de Venta</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            color: #000;
+          }
+          h2 {
+            text-align: center;
+            margin-bottom: 20px;
+          }
+          ul {
+            list-style: none;
+            padding: 0;
+          }
+          li {
+            margin-bottom: 6px;
+            font-size: 14px;
+          }
+          p {
+            font-size: 14px;
+            text-align: center;
+            margin: 6px 0;
+          }
+        </style>
+      </head>
+      <body>
+        ${ticketContent}
+        <script>
+          window.onload = function () {
+            window.print();
+            window.onafterprint = function () {
+              window.close();
+            };
+          };
+        <\/script>
+      <\/body>
+    </html>
+  `);
 
-  this.totalAcumulado = 0;
-  this.ventasRealizadas = [];
-  localStorage.setItem('ventas_realizadas', '[]');
-  localStorage.setItem('total_acumulado_dia', '0');
-  localStorage.setItem('fecha_total_acumulado', cierre.fecha);
+  ventana.document.close();
+
+  // Ocultar el ticket después de imprimir
+  this.ventaFinalizada = false;
 },
-
-    imprimirTicket() {
-      const original = document.body.innerHTML;
-      const ticket = document.getElementById('ticket').innerHTML;
-      document.body.innerHTML = ticket;
-      window.print();
-      document.body.innerHTML = original;
-      window.location.reload();
-    },
     procesarEscaneo() {
       const codigo = this.codigoEscaneado.trim();
       if (!codigo) return;
 
-      const producto = this.productos.find(p => p.codigo === codigo);
+      const producto = this.productos.find(p => p.codigoBarras === codigo);
 
       if (!producto) {
         alert('Producto no encontrado');
@@ -295,7 +299,9 @@ cerrarCaja() {
     },
     reenfocarInput() {
       setTimeout(() => {
-        this.$refs.inputCodigo?.focus();
+        if (!this.inputActivo) {
+          this.$refs.inputCodigo?.focus();
+        }
       }, 100);
     },
     detectarEscape(event) {
@@ -304,9 +310,9 @@ cerrarCaja() {
       }
     }
   }
-}
-
+};
 </script>
+
 
 
 <style scoped>
@@ -460,6 +466,17 @@ cerrarCaja() {
 
 .contador-cantidad button:hover:not(:disabled) {
   background-color: #388e3c;
+}
+
+.btn-eliminar {
+  margin-left: 10px;
+  background-color: #e74c3c;
+  border: none;
+  color: white;
+  padding: 3px 7px;
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 0.8rem;
 }
 
 .subtotal {

@@ -5,10 +5,10 @@
 
       <nav class="nav-botones">
         <button @click="irA('Caja')" :class="{ activo: vista === 'Caja' }">Caja</button>
-        <button @click="irA('Creditos')" :class="{ activo: vista === 'Creditos' }">Creditos</button>
-        <button v-if="rolUsuario === 'admin'"@click="irA('Inventario')" :class="{ activo: vista === 'Inventario' }">Inventario</button>
-        <button v-if="rolUsuario === 'admin'"@click="irA('Reportes')" :class="{ activo: vista === 'Reportes' }">Reportes</button>
-        <button v-if="rolUsuario === 'admin'"@click="irA('Administrador')" :class="{ activo: vista === 'Administrador' }">Administrador</button>
+        <button @click="irA('Creditos')" :class="{ activo: vista === 'Creditos' }">Créditos</button>
+        <button v-if="rolUsuario === 'admin'" @click="irA('Inventario')" :class="{ activo: vista === 'Inventario' }">Inventario</button>
+        <button v-if="rolUsuario === 'admin'" @click="irA('Reportes')" :class="{ activo: vista === 'Reportes' }">Reportes</button>
+        <button v-if="rolUsuario === 'admin'" @click="irA('Administrador')" :class="{ activo: vista === 'Administrador' }">Administrador</button>
         <button @click="cerrarSesion" class="btn-logout">Cerrar sesión</button>
       </nav>
     </header>
@@ -23,28 +23,28 @@
           :sucursal="sucursalActual"
           @nueva-venta="agregarVenta"
         />
-          <Creditosview
+        <Creditosview
           v-if="vista === 'Creditos'"
           ref="creditosviewComponent"
           :sucursal="sucursalActual"
         />
         <InventarioView
-          v-else-if="vista === 'Inventario'"
+          v-if="vista === 'Inventario'"
           :sucursal="sucursalActual"
         />
         <ReportesView
-          v-else-if="vista === 'Reportes'"
+          v-if="vista === 'Reportes'"
           :ventas="ventas"
           :sucursal="sucursalActual"
         />
         <AdministradorView
-        v-else-if="vista === 'Administrador'"
+          v-if="vista === 'Administrador'"
         />
       </div>
     </main>
 
     <!-- Modal de Confirmación de Cierre de Sesión -->
-    <div v-if="mostrarAlerta" class="modal-overlay">
+    <div v-if="mostrarAlerta" class="modal-overlay" @click.self="cancelarCerrarSesion">
       <div class="modal-contenido">
         <div class="modal-icono">⚠️</div>
         <h2 class="modal-titulo">¿Cerrar sesión?</h2>
@@ -57,7 +57,7 @@
     </div>
 
     <!-- Modal de Confirmación de Corte del Día -->
-    <div v-if="mostrarCorteConfirmado" class="modal-overlay">
+    <div v-if="mostrarCorteConfirmado" class="modal-overlay" @click.self="finalizarCorte">
       <div class="modal-contenido">
         <div class="modal-icono">✅</div>
         <h2 class="modal-titulo">¡Corte del día realizado!</h2>
@@ -85,12 +85,12 @@ export default {
     Creditosview,
     InventarioView,
     ReportesView,
-    AdministradorView,
+    AdministradorView
   },
   data() {
     return {
       vista: 'Caja',
-      ventas: [],
+      ventas: JSON.parse(localStorage.getItem('ventas_realizadas')) || [],
       logueado: false,
       mostrarAlerta: false,
       mostrarCorteConfirmado: false,
@@ -104,12 +104,12 @@ export default {
     },
     agregarVenta(nuevaVenta) {
       this.ventas.push(nuevaVenta)
+      localStorage.setItem('ventas_realizadas', JSON.stringify(this.ventas))
     },
     cerrarSesion() {
       this.mostrarAlerta = true
     },
     confirmarCerrarSesion() {
-      // Cierra caja sin alert
       if (this.$refs.cajaViewComponent?.cerrarCaja) {
         this.$refs.cajaViewComponent.cerrarCaja()
       }
@@ -117,7 +117,6 @@ export default {
       this.mostrarCorteConfirmado = true
     },
     finalizarCorte() {
-      // Cerrar sesión después del corte
       logout()
       this.mostrarCorteConfirmado = false
       this.logueado = false
