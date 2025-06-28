@@ -16,7 +16,7 @@ export function obtenerProductosPorSucursal(sucursal) {
         imagen: 'https://m.media-amazon.com/images/I/51tc2UgRMXL._AC_UF894,1000_QL80_.jpg',
         sucursal: 'SUCURSAL1',
         codigoBarras: '7500000000013',
-        fechaCaducidad: '2027-12-31'
+        fechaCaducidad: '2027-12-31'  
       },
       {
         id: 2,
@@ -51,28 +51,6 @@ export function obtenerProductosPorSucursal(sucursal) {
         codigoBarras: '7500000000044',
         fechaCaducidad: '2027-05-20'
       },
-      {
-        id: 5,
-        nombre: 'Calcetines Blancos',
-        categoria: 'Ropa',
-        precio: 50.00,
-        stock: 20,
-        imagen: 'https://sportmasters.com.mx/cdn/shop/products/4HT3458-BCO-001.jpg?v=1698363961',
-        sucursal: 'SUCURSAL1',
-        codigoBarras: '7500000000051',
-        fechaCaducidad: '2028-01-10'
-      },
-            {
-        id: 6,
-        nombre: 'Audifonos Inalámbricos',
-        categoria: 'Electrónica',
-        precio: 500.00,
-        stock: 20,
-        imagen: 'https://selectsound.com.mx/cdn/shop/files/audifonos-inalambricos-bluetooth-manos-libres-sense-bth028-401895.jpg?v=1717819739',
-        sucursal: 'SUCURSAL1',
-        codigoBarras: '7500000000151',
-        fechaCaducidad: '2028-01-10'
-      },
             {
         id: 7,
         nombre: 'Celular Samsung',
@@ -95,14 +73,35 @@ export function obtenerProductosPorSucursal(sucursal) {
         codigoBarras: '7500000000351',
         fechaCaducidad: '2028-01-10'
       },
-
+            {
+        id: 5,
+        nombre: 'Cereal',
+        categoria: 'Alimentos',
+        precio: 50.00,
+        stock: 20,
+        imagen: 'https://i5.walmartimages.com/asr/9555b9bc-b982-4065-b431-d1fcfd2cb9b8.c29a13ad7a88b2f87b3c1e1efdef0caf.jpeg?odnHeight=612&odnWidth=612&odnBg=FFFFFF',
+        sucursal: 'SUCURSAL1',
+        codigoBarras: '7500000000051',
+        fechaCaducidad: '2024-01-10'
+      },
+            {
+        id: 6,
+        nombre: 'Galletas',
+        categoria: 'Alimentos',
+        precio: 500.00,
+        stock: 20,
+        imagen: 'https://farmaciagloria.mx/6811-large_default/galleta-gamesa-chokis-de-76-g.webp',
+        sucursal: 'SUCURSAL1',
+        codigoBarras: '7500000000151',
+        fechaCaducidad: '2024-01-10'
+      },
       // SUCURSAL2 - ya existe 1 producto, agrego 4 más
       {
         id: 6,
         nombre: 'Auriculares Bluetooth',
         categoria: 'Electrónica',
         precio: 599.5,
-        stock: 5,
+        stock: 2,
         imagen: 'https://mobomx.vtexassets.com/arquivos/ids/196876-800-auto?v=638212067600330000&width=800&height=auto&aspect=true',
         sucursal: 'SUCURSAL2',
         codigoBarras: '7500000000068',
@@ -113,7 +112,7 @@ export function obtenerProductosPorSucursal(sucursal) {
         nombre: 'Smartwatch Deportivo',
         categoria: 'Electrónica',
         precio: 1200.00,
-        stock: 4,
+        stock: 2,
         imagen: 'https://example.com/smartwatch_deportivo.jpg',
         sucursal: 'SUCURSAL2',
         codigoBarras: '7500000000075',
@@ -213,14 +212,6 @@ export function obtenerProductosPorSucursal(sucursal) {
     localStorage.setItem('productos', JSON.stringify(productos))
     localStorage.setItem('siguienteId', '16')
   }
-
-  // Normaliza nombres antiguos si es necesario
-  productos = productos.map(p => {
-    if (p.sucursal === 'CENTRO') p.sucursal = 'SUCURSAL1'
-    else if (p.sucursal === 'NORTE') p.sucursal = 'SUCURSAL2'
-    else if (p.sucursal === 'SUR') p.sucursal = 'SUCURSAL3'
-    return p
-  })
 
   // Guardar la normalización
   localStorage.setItem('productos', JSON.stringify(productos))

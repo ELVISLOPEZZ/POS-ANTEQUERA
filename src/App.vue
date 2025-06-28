@@ -154,9 +154,8 @@ export default {
 }
 </script>
 
-
 <style scoped>
-/* === Reset === */
+/* RESET */
 * {
   margin: 0;
   padding: 0;
@@ -164,107 +163,124 @@ export default {
 }
 
 body, html, #app {
-  font-family: 'Segoe UI', sans-serif;
-  background-color: #f7f7f7;
+  font-family: 'Poppins', sans-serif;
+  background-color: #fafafa; /* fondo neutro claro */
   min-height: 100vh;
 }
 
-/* === Header === */
+/* HEADER elegante café */
 .app-header {
-  background: linear-gradient(135deg, #2196F3, #21CBF3);
-  padding: 1rem 2rem;
+  background: linear-gradient(135deg, #d7ccc8, #efebe9);
+  padding: 1.2rem 2rem;
   display: flex;
   flex-direction: column;
   align-items: center;
-  border-bottom: 4px solid #1976D2;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-bottom: 3px solid #bcaaa4;
+  box-shadow: 0 6px 10px rgba(0, 0, 0, 0.08);
+  border-radius: 0 0 18px 18px;
 }
 
 .titulo-sistema {
-  font-size: 2rem;
-  color: rgb(11, 7, 0);
-  font-weight: bold;
+  font-size: 2.5rem;
+  color: #4e342e;
+  font-weight: 700;
   margin-bottom: 1rem;
+  text-shadow: 1px 1px 1px rgba(0,0,0,0.05);
 }
 
-/* === Navegación === */
+/* NAV BAR con íconos */
 .nav-botones {
   display: flex;
-  gap: 1rem;
   flex-wrap: wrap;
   justify-content: center;
+  gap: 0.7rem;
 }
 
 .nav-botones button {
-  padding: 0.6rem 1.2rem;
-  background-color: #ffffff;
-  border: none;
-  border-radius: 12px;
+  padding: 0.65rem 1.4rem;
+  border-radius: 14px;
   font-size: 1rem;
   font-weight: 600;
-  color: #1565C0;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   transition: all 0.3s ease;
-  box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.05);
+  border: 2px solid transparent;
+  background-color: #fff6ec;
+  color: #4e342e;
 }
 
+/* Emojis decorativos */
+.nav-botones button:nth-child(1)::before { content: "💵"; }
+.nav-botones button:nth-child(2)::before { content: "🧾"; }
+.nav-botones button:nth-child(3)::before { content: "📦"; }
+.nav-botones button:nth-child(4)::before { content: "📊"; }
+.nav-botones button:nth-child(5)::before { content: "👤"; }
+
 .nav-botones button:hover {
-  background-color: #E3F2FD;
+  background-color: #ffe0b2; /* durazno claro */
   transform: translateY(-2px);
+  box-shadow: 0 5px 10px rgba(0,0,0,0.1);
 }
 
 .nav-botones button.activo {
-  background-color: #1976D2;
-  color: white;
+  background-color: #a5d6a7; /* verde menta */
+  color: #1b5e20;
+  border-color: #81c784;
 }
 
-/* === Botón logout === */
+/* BOTÓN CERRAR SESIÓN */
 .btn-logout {
-  background-color: #EF5350;
-  color: white;
-  padding: 0.6rem 1rem;
-  border-radius: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.3s ease, transform 0.2s;
+  background-color: #ef9a9a;
+  color: #ffffff;
+  padding: 0.6rem 1.2rem;
+  border: none;
+  border-radius: 14px;
+  font-weight: bold;
+  margin-left: 1rem;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
-
+.btn-logout::before {
+  content: "🔓";
+}
 .btn-logout:hover {
-  background-color: #C62828;
+  background-color: #c62828;
   transform: scale(1.05);
 }
 
-/* === Contenido principal === */
+/* CONTENIDO PRINCIPAL */
 .contenido {
   padding: 2rem;
   max-width: 1200px;
-  margin: 0 auto;
+  margin: auto;
 }
 
-/* === Modal === */
+/* MODALES */
 .modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(30, 30, 30, 0.7);
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(40, 30, 20, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 999;
-  animation: fadeIn 0.3s ease-in-out;
+  z-index: 1000;
 }
 
 .modal-contenido {
-  background: #ffffff;
+  background-color: #fff9f4;
+  border: 2px solid #e0cfc2;
   padding: 2rem;
-  border-radius: 20px;
-  text-align: center;
-  max-width: 400px;
+  border-radius: 16px;
   width: 90%;
-  box-shadow: 0 0 30px rgba(0, 0, 0, 0.25);
-  animation: slideUp 0.4s ease-in-out;
+  max-width: 420px;
+  text-align: center;
+  box-shadow: 0 0 30px rgba(0,0,0,0.2);
 }
 
 .modal-icono {
@@ -273,15 +289,16 @@ body, html, #app {
 }
 
 .modal-titulo {
-  font-size: 1.5rem;
-  margin-bottom: 0.5rem;
-  color: #e53935;
+  font-size: 1.6rem;
+  font-weight: bold;
+  color: #bf360c;
+  margin-bottom: 0.6rem;
 }
 
 .modal-texto {
+  color: #5d4037;
   font-size: 1rem;
   margin-bottom: 1.5rem;
-  color: #555;
 }
 
 .modal-botones {
@@ -290,54 +307,29 @@ body, html, #app {
   gap: 1rem;
 }
 
-.btn-confirmar {
-  padding: 0.5rem 1.2rem;
-  background-color: #e53935;
-  color: white;
-  border: none;
+/* Botones del modal */
+.btn-confirmar, .btn-cancelar {
+  padding: 0.6rem 1.4rem;
   border-radius: 10px;
-  cursor: pointer;
+  border: none;
   font-weight: bold;
-  transition: background 0.3s;
+  cursor: pointer;
+  transition: all 0.3s ease;
 }
 
+.btn-confirmar {
+  background-color: #4caf50;
+  color: white;
+}
 .btn-confirmar:hover {
-  background-color: #b71c1c;
+  background-color: #388e3c;
 }
 
 .btn-cancelar {
-  padding: 0.5rem 1.2rem;
-  background-color: #9e9e9e;
+  background-color: #90a4ae;
   color: white;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  font-weight: bold;
-  transition: background 0.3s;
 }
-
 .btn-cancelar:hover {
-  background-color: #616161;
-}
-
-/* Animaciones */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes slideUp {
-  from {
-    transform: translateY(30px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
+  background-color: #607d8b;
 }
 </style>

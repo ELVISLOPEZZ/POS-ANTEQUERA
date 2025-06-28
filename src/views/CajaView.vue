@@ -72,6 +72,11 @@
           <input type="radio" value="tarjeta" v-model="metodoPago" />
           Tarjeta
         </label>
+        <label>
+        <input type="radio" value="transferencia" v-model="metodoPago" />
+          Transferencia
+        </label>
+
       </div>
 
       <div v-if="totalAcumulado > 0" class="recuadro-total-acumulado">
@@ -198,88 +203,100 @@ export default {
         this.carrito = this.carrito.filter(p => p.id !== item.id);
       }
     },
-    finalizarVenta() {
-      this.carrito.forEach(item => {
-        const prod = this.productos.find(p => p.id === item.id);
-        if (prod) prod.stock -= item.cantidad;
-      });
+    
+finalizarVenta() {
+  // Actualizar stock en productos
+  this.carrito.forEach(item => {
+    const prod = this.productos.find(p => p.id === item.id);
+    if (prod) prod.stock -= item.cantidad;
+  });
 
-      const venta = {
-        id: Date.now(),
-        productos: JSON.parse(JSON.stringify(this.carrito)),
-        total: this.total,
-        metodoPago: this.metodoPago,
-        fecha: new Date().toISOString()
-      };
+  // Obtener usuario actual desde localStorage
+const usuarioActual = JSON.parse(localStorage.getItem('usuario')) || {
+  username: 'desconocido',
+  sucursal: 'sin_sucursal'
+};
 
-      this.ventasRealizadas.push(venta);
-      localStorage.setItem('ventas_realizadas', JSON.stringify(this.ventasRealizadas));
-      this.totalAcumulado += this.total;
-      localStorage.setItem('total_acumulado_dia', this.totalAcumulado.toString());
 
-      const hoy = new Date().toISOString().slice(0, 10);
-      localStorage.setItem('fecha_total_acumulado', hoy);
+  // Crear objeto de venta
+  const venta = {
+    id: Date.now(),
+    productos: JSON.parse(JSON.stringify(this.carrito)),
+    total: this.total,
+    metodoPago: this.metodoPago,
+    fecha: new Date().toISOString(),
+    usuario: {
+      nombre: usuarioActual.username,
+      sucursal: usuarioActual.sucursal
+},
+sucursal: usuarioActual.sucursal
+  };
 
-      this.$emit('nueva-venta', venta);
+  // Guardar venta
+  this.ventasRealizadas.push(venta);
+  localStorage.setItem('ventas_realizadas', JSON.stringify(this.ventasRealizadas));
 
-      this.carritoAnterior = [...this.carrito];
-      this.totalAnterior = this.total;
-      this.metodoPagoAnterior = this.metodoPago;
-      this.ventaFinalizada = true;
+  // Guardar totales acumulados por día
+  this.totalAcumulado += this.total;
+  localStorage.setItem('total_acumulado_dia', this.totalAcumulado.toString());
+  const hoy = new Date().toISOString().slice(0, 10);
+  localStorage.setItem('fecha_total_acumulado', hoy);
 
-      this.carrito = [];
-      this.codigoEscaneado = '';
-    },
+  // Emitir evento y limpiar estados
+  this.$emit('nueva-venta', venta);
+  this.carritoAnterior = [...this.carrito];
+  this.totalAnterior = this.total;
+  this.metodoPagoAnterior = this.metodoPago;
+  this.ventaFinalizada = true;
+  this.carrito = [];
+  this.codigoEscaneado = '';
+},
+
 imprimirTicket() {
-  const ticketContent = document.getElementById('ticket').innerHTML;
-
-  const ventana = window.open('', '_blank', 'width=400,height=600');
-  ventana.document.write(`
-    <html>
-      <head>
-        <title>Ticket de Venta</title>
-        <style>
-          body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            color: #000;
-          }
-          h2 {
-            text-align: center;
-            margin-bottom: 20px;
-          }
-          ul {
-            list-style: none;
-            padding: 0;
-          }
-          li {
-            margin-bottom: 6px;
-            font-size: 14px;
-          }
-          p {
-            font-size: 14px;
-            text-align: center;
-            margin: 6px 0;
-          }
-        </style>
-      </head>
-      <body>
-        ${ticketContent}
-        <script>
-          window.onload = function () {
-            window.print();
-            window.onafterprint = function () {
-              window.close();
-            };
-          };
-        <\/script>
-      <\/body>
-    </html>
-  `);
-
-  ventana.document.close();
-
-  // Ocultar el ticket después de imprimir
+  const ticketContent = `
+    <div style="text-align: left; font-size: 12px; font-family: monospace;">
+      <h2 style="text-align: center; font-size: 16px;">POS OAXACA DE ANTEQUERA</h2>
+      <p>Fecha: ${new Date().toLocaleString()}</p>
+      <hr />
+      <p><strong>Productos:</strong></p>
+      ${this.carritoAnterior
+        .map(
+          (item) =>
+            `${item.nombre} x${item.cantidad}  $${(item.precio * item.cantidad).toFixed(2)}`
+        )
+        .join('<br>')}
+      <hr />
+      <p><strong>Total: $${this.totalAnterior.toFixed(2)}</strong></p>
+      <p>Método de pago: ${this.metodoPagoAnterior}</p>
+      <p style="text-align: center;">¡Gracias por su compra!</p>
+      <br><br><br> <!-- espacio para cortar -->
+    </div>
+  `;
+  const printWindow = window.open('', '', 'width=300,height=600');
+  if (printWindow) {
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Ticket</title>
+          <style>
+            @media print {
+              body {
+                margin: 0;
+                padding: 0;
+                font-family: monospace;
+                font-size: 12px;
+              }
+            }
+          </style>
+        </head>
+        <body onload="window.print(); window.close();">
+          ${ticketContent}
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  }
+  // Oculta el ticket en pantalla principal
   this.ventaFinalizada = false;
 },
     procesarEscaneo() {

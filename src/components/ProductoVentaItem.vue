@@ -1,71 +1,160 @@
 <template>
-  <div class="reporte-ventas">
-    <h1>Reporte de Ventas</h1>
+  <div class="modal-overlay" @click.self="cerrarModal" :class="{ cerrar: animandoCierre }">
+    <div class="modal-content">
+      <h2>🔍 Detalle de Venta</h2>
+      <p><strong>ID:</strong> {{ venta.id }}</p>
+      <p><strong>Fecha:</strong> {{ new Date(venta.fecha).toLocaleString() }}</p>
+      <p><strong>Cajero:</strong> {{ venta.usuario?.nombre || 'N/A' }}</p>
+      <p><strong>Sucursal:</strong> {{ venta.usuario?.sucursal || venta.sucursal || 'N/A' }}</p>
+      <p><strong>Método de Pago:</strong> {{ venta.metodoPago }}</p>
 
-    <label>Filtrar por fecha:</label>
-    <input type="date" v-model="fechaInicio" /> a
-    <input type="date" v-model="fechaFin" />
+      <table class="detalle-tabla">
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th>Cantidad</th>
+            <th>Precio Unitario</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(p, index) in venta.productos" :key="index">
+            <td>{{ p.nombre }}</td>
+            <td>{{ p.cantidad }}</td>
+            <td>${{ p.precio?.toFixed(2) || '0.00' }}</td>
+            <td>${{ (p.precio * p.cantidad)?.toFixed(2) || '0.00' }}</td>
+          </tr>
+        </tbody>
+      </table>
 
-    <table>
-      <thead>
-        <tr>
-          <th>Fecha</th>
-          <th>Total</th>
-          <th>Método de pago</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="venta in ventasFiltradas" :key="venta.id">
-          <td>{{ new Date(venta.fecha).toLocaleString() }}</td>
-          <td>${{ venta.total }}</td>
-          <td>{{ venta.metodoPago }}</td>
-        </tr>
-      </tbody>
-    </table>
+      <div class="total-final">
+        Total de la Venta: ${{ venta.total.toFixed(2) }}
+      </div>
 
-    <p><strong>Ingresos Totales: ${{ ingresosTotales }}</strong></p>
+      <button class="cerrar-btn" @click="cerrarModal">Cerrar</button>
+    </div>
   </div>
 </template>
 
 <script>
 export default {
-  props: ['ventas'],
+  props: ['venta'],
   data() {
-    const hoy = new Date().toISOString().split('T')[0]
     return {
-      fechaInicio: hoy,
-      fechaFin: hoy
+      animandoCierre: false
     }
   },
-  computed: {
-    ventasFiltradas() {
-      return this.ventas.filter(venta => {
-        const fechaVenta = new Date(venta.fecha)
-        const inicio = new Date(this.fechaInicio)
-        const fin = new Date(this.fechaFin)
-        // Comparar fechas normalizadas
-        return fechaVenta >= inicio && fechaVenta <= new Date(fin.getTime() + 86400000 - 1)
-      })
-    },
-    ingresosTotales() {
-      return this.ventasFiltradas.reduce((sum, venta) => sum + venta.total, 0)
+  methods: {
+    cerrarModal() {
+      this.animandoCierre = true
+      setTimeout(() => {
+        this.$emit('cerrar')
+      }, 300) // duración de la animación
     }
   }
 }
 </script>
 
 <style scoped>
-table {
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease forwards;
+}
+
+.modal-overlay.cerrar {
+  animation: fadeOut 0.3s ease forwards;
+}
+
+.modal-content {
+  background: white;
+  padding: 2rem;
+  width: 90%;
+  max-width: 600px;
+  border-radius: 16px;
+  box-shadow: 0 0 20px rgba(0,0,0,0.2);
+  font-family: 'Poppins', sans-serif;
+  animation: slideIn 0.3s ease;
+}
+
+.detalle-tabla {
   width: 100%;
-  border-collapse: collapse;
   margin-top: 1rem;
+  border-collapse: collapse;
+  border-radius: 8px;
+  overflow: hidden;
 }
-th, td {
-  border: 1px solid #ddd;
-  padding: 8px;
+
+.detalle-tabla th,
+.detalle-tabla td {
+  padding: 0.75rem;
+  text-align: center;
+  border: 1px solid #e0e0e0;
 }
-th {
-  background-color: #1976d2;
+
+.detalle-tabla th {
+  background-color: #2e7d32;
   color: white;
+}
+
+.total-final {
+  margin-top: 1.5rem;
+  text-align: right;
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: #2c3e50;
+}
+
+.cerrar-btn {
+  margin-top: 2rem;
+  background-color: #d32f2f;
+  color: white;
+  border: none;
+  padding: 0.7rem 1.4rem;
+  border-radius: 8px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.cerrar-btn:hover {
+  background-color: #b71c1c;
+}
+
+/* Animaciones */
+@keyframes slideIn {
+  from {
+    transform: translateY(-30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    background: rgba(0, 0, 0, 0);
+  }
+  to {
+    background: rgba(0, 0, 0, 0.6);
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    background: rgba(0, 0, 0, 0.6);
+  }
+  to {
+    background: rgba(0, 0, 0, 0);
+  }
 }
 </style>

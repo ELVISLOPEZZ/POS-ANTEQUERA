@@ -1,15 +1,34 @@
 <template>
   <div class="inventario">
+
+    <!-- Ventana emergente para mensajes temporales -->
+    <transition name="fade">
+      <div v-if="mensajeEmergente" class="alerta-emergente">
+        {{ mensajeEmergente }}
+      </div>
+    </transition>
+
     <h1>Inventario</h1>
 
-<div v-if="alertaActiva" class="alerta-visual">
-  ⚠️ Alerta: Los siguientes productos tienen bajo inventario:
+    <div v-if="alertaActiva" class="alerta-visual">
+      ⚠️ Alerta: Los siguientes productos tienen bajo inventario:
+      <ul>
+        <li v-for="p in productosBajoStock" :key="p.id">
+          • {{ p.nombre }} (Stock: {{ p.stock }})
+        </li>
+      </ul>
+    </div>
+
+    <!-- Alerta de productos caducados -->
+<div v-if="alertaCaducidadActiva" class="alerta-visual" style="border-left-color: #e53e3e; background-color: #fff0f0; color: #9b2c2c;">
+  ⚠️ Alerta: Los siguientes productos están caducados o por caducar:
   <ul>
-    <li v-for="p in productosBajoStock" :key="p.id">
-      • {{ p.nombre }} (Stock: {{ p.stock }})
+    <li v-for="p in productosCaducados" :key="p.id">
+      • {{ p.nombre }} (Caducidad: {{ p.fechaCaducidad }})
     </li>
   </ul>
 </div>
+
 
     <div class="botones-superior">
       <button class="btn-agregar" @click="agregarProducto">➕ Agregar Producto</button>
@@ -51,6 +70,21 @@
     </div>
 
     <!-- Modal Producto -->
+<transition name="fade">
+  <div v-if="modalEliminarActivo" class="modal-eliminar-backdrop">
+    <div class="modal-eliminar">
+      <h3>Eliminar Producto ⚠️</h3>
+      <p>¿Seguro que deseas eliminar <strong>"{{ productoAEliminar?.nombre }}"</strong>?</p>
+      <div class="modal-eliminar-botones">
+        <button class="btn-cancelar" @click="cancelarEliminar">Cancelar</button>
+        <button class="btn-eliminar-confirmar" @click="confirmarEliminar">🗑️ Eliminar</button>
+      </div>
+    </div>
+  </div>
+</transition>
+
+
+
     <div v-if="modalActivo" class="modal">
       <div class="modal-contenido">
         <h2>{{ productoSeleccionado === null ? 'Agregar Producto' : 'Editar Producto' }}</h2>
@@ -83,11 +117,19 @@
               <input id="stock" v-model.number="formulario.stock" type="number" min="0" required />
             </div>
             <div class="form-row">
-              <label for="codigoBarras">Codigo de Barras</label>
-              <input id="codigoBarras" v-model.number="formulario.codigoBarras" type="number" min="0" max="13" required />
+              <label for="codigoBarras">Código de Barras</label>
+              <input
+                id="codigoBarras"
+                v-model="formulario.codigoBarras"
+                type="text"
+                pattern="\d{1,13}"
+                maxlength="13"
+                inputmode="numeric"
+                required
+              />
             </div>
             <div class="form-row">
-              <label for="fechaCaducidad">Caducidaad</label>
+              <label for="fechaCaducidad">Caducidad</label>
               <input id="fechaCaducidad" v-model="formulario.fechaCaducidad" type="date" required />
             </div>
             <div class="form-row form-row-full">
@@ -129,28 +171,31 @@
   </div>
 </template>
 
-
-
 <script>
 import { obtenerProductosPorSucursal } from '../productos.js'
 export default {
   data() {
     return {
-      sucursal: localStorage.getItem('store_code') || '', // ← obtiene sucursal activa
+      sucursal: localStorage.getItem('store_code') || '',
       productos: [],
       siguienteId: Number(localStorage.getItem('siguienteId')) || 4,
       modalActivo: false,
       modalCategoriaActivo: false,
       productoSeleccionado: null,
-      formulario: { nombre: '', categoria: '', precio: 0, stock: 0, imagen: '' },
+      formulario: { nombre: '', categoria: '', precio: 0, stock: 0, imagen: '', codigoBarras: '', fechaCaducidad: '' },
       formCategoria: { nombre: '' },
       terminoBusqueda: '',
       categoriaSeleccionada: '',
       productosFiltrados: [],
       fechaCaducidad: '',
       alertaActiva: false,
-      productosBajoStock: [],
-      categorias: JSON.parse(localStorage.getItem('categorias')) || ['Ropa', 'Electrónica']
+      productosBajoStock: [],  
+      categorias: JSON.parse(localStorage.getItem('categorias')) || ['Ropa', 'Electrónica'],
+      mensajeEmergente: '',          // Para mostrar alertas temporales (producto creado/eliminado)
+      modalEliminarActivo: false,    // Controla si el modal para eliminar está visible
+      productoAEliminar: null,       // Guarda el producto que queremos eliminar
+      productosCaducados: [],
+      alertaCaducidadActiva: false,
     }
   },
   computed: {
@@ -161,10 +206,8 @@ export default {
     }
   },
   created() {
-    // Obtener o asignar sucursal activa
     let storeCode = localStorage.getItem('store_code')
     if (!storeCode) {
-      // Si no hay store_code, asignamos uno por defecto (ejemplo: 'SUCURSAL1')
       storeCode = 'SUCURSAL1'
       localStorage.setItem('store_code', storeCode)
     }
@@ -172,19 +215,20 @@ export default {
     this.productos = obtenerProductosPorSucursal(this.sucursal)
     this.aplicarFiltro()
     this.verificarBajoInventario()
-    },
+  },
   methods: {
-
-verificarBajoInventario() {
-  const umbral = 5
-  this.productosBajoStock = this.productos.filter(p => p.stock <= umbral)
-  this.alertaActiva = this.productosBajoStock.length > 0
-  // Si quieres ocultar la alerta automáticamente después de unos segundos:
-},
-
+    verificarBajoInventario() {
+      const umbral = 5
+      this.productosBajoStock = this.productos.filter(p => p.stock <= umbral)
+      this.alertaActiva = this.productosBajoStock.length > 0
+    // NUEVO: verificar productos caducados
+    const hoy = new Date().toISOString().slice(0, 10) // 'YYYY-MM-DD'
+    this.productosCaducados = this.productos.filter(p => p.fechaCaducidad && p.fechaCaducidad <= hoy)
+    this.alertaCaducidadActiva = this.productosCaducados.length > 0
+    },
     agregarProducto() {
       this.productoSeleccionado = null
-      this.formulario = { nombre: '', categoria: '', precio: 0, stock: 0, imagen: '' }
+      this.formulario = { nombre: '', categoria: '', precio: 0, stock: 0, imagen: '', codigoBarras: '', fechaCaducidad: '' }
       this.modalActivo = true
     },
     abrirModalCategoria() {
@@ -210,40 +254,54 @@ verificarBajoInventario() {
       this.formulario = { ...producto }
       this.modalActivo = true
     },
-    guardarCambios() {
-      let todosLosProductos = JSON.parse(localStorage.getItem('productos')) || []
+guardarCambios() {
+  const codigo = this.formulario.codigoBarras?.toString() || ''
+  if (!/^\d{1,13}$/.test(codigo)) {
+    alert('El código de barras debe tener solo números y máximo 13 dígitos.')
+    return
+  }
 
-      if (this.productoSeleccionado === null) {
-        const nuevoProducto = {
-          id: this.siguienteId++,
-          ...this.formulario,
-          sucursal: this.sucursal
-        }
-        todosLosProductos.push(nuevoProducto)
-      } else {
-        const index = todosLosProductos.findIndex(p => p.id === this.productoSeleccionado)
-        if (index !== -1) {
-          todosLosProductos[index] = {
-            id: this.productoSeleccionado,
-            ...this.formulario,
-            sucursal: this.sucursal
-          }
-        }
-      }
+  let todosLosProductos = JSON.parse(localStorage.getItem('productos')) || []
+  const esNuevo = this.productoSeleccionado === null
 
-      localStorage.setItem('siguienteId', this.siguienteId)
-      localStorage.setItem('productos', JSON.stringify(todosLosProductos))
-      this.modalActivo = false
-      this.refrescarProductos()
-    },
-    eliminarProducto(id) {
-      if (confirm('¿Seguro que deseas eliminar este producto?')) {
-        let todosLosProductos = JSON.parse(localStorage.getItem('productos')) || []
-        todosLosProductos = todosLosProductos.filter(p => p.id !== id)
-        localStorage.setItem('productos', JSON.stringify(todosLosProductos))
-        this.refrescarProductos()
+  if (esNuevo) {
+    const nuevoProducto = {
+      id: this.siguienteId++,
+      ...this.formulario,
+      sucursal: this.sucursal
+    }
+    todosLosProductos.push(nuevoProducto)
+  } else {
+    const index = todosLosProductos.findIndex(p => p.id === this.productoSeleccionado)
+    if (index !== -1) {
+      todosLosProductos[index] = {
+        id: this.productoSeleccionado,
+        ...this.formulario,
+        sucursal: this.sucursal
       }
-    },
+    }
+  }
+
+  localStorage.setItem('siguienteId', this.siguienteId)
+  localStorage.setItem('productos', JSON.stringify(todosLosProductos))
+  this.modalActivo = false
+  this.refrescarProductos()
+
+  // ✅ MENSAJES EMERGENTES
+  this.mensajeEmergente = esNuevo
+    ? 'Producto creado exitosamente ✅'
+    : 'Producto editado correctamente ✏️✅'
+  setTimeout(() => {
+    this.mensajeEmergente = ''
+  }, 3000)
+},
+
+eliminarProducto(id) {
+  const producto = this.productos.find(p => p.id === id);
+  if (producto) {
+    this.abrirModalEliminar(producto);
+  }
+},
     cancelarEdicion() {
       this.modalActivo = false
     },
@@ -252,7 +310,6 @@ verificarBajoInventario() {
       this.productos = todosLosProductos.filter(p => p.sucursal === this.sucursal)
       this.aplicarFiltro()
       this.verificarBajoInventario()
-
     },
     aplicarFiltro() {
       const termino = this.terminoBusqueda.toLowerCase().trim()
@@ -266,13 +323,36 @@ verificarBajoInventario() {
     },
     filtrarPorCategoria() {
       this.aplicarFiltro()
-    }
+    },
+      abrirModalEliminar(producto) {
+    this.productoAEliminar = producto
+    this.modalEliminarActivo = true
+  },
+
+  cancelarEliminar() {
+    this.modalEliminarActivo = false
+    this.productoAEliminar = null
+  },
+
+  confirmarEliminar() {
+    if (!this.productoAEliminar) return;
+    let todosLosProductos = JSON.parse(localStorage.getItem('productos')) || []
+    todosLosProductos = todosLosProductos.filter(p => p.id !== this.productoAEliminar.id)
+    localStorage.setItem('productos', JSON.stringify(todosLosProductos))
+    this.refrescarProductos()
+    this.modalEliminarActivo = false
+    this.productoAEliminar = null
+    this.mensajeEmergente = 'Producto eliminado correctamente ❌'
+    setTimeout(() => {
+      this.mensajeEmergente = ''
+    }, 3000)
+  },
   }
 }
 </script>
 
+
 <style scoped>
-/* Tu CSS sin cambios */
 .inventario {
   font-family: 'Segoe UI', sans-serif;
   padding: 2rem;
@@ -280,15 +360,14 @@ verificarBajoInventario() {
   min-height: 100vh;
 }
 
-/* 2) Estilo solo para el título “Inventario” */
 .inventario h1 {
   font-family: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  font-weight: 700;          /* Negrita elegante */
-  font-size: 2.4rem;         /* Más grande y legible */
-  letter-spacing: 0.5px;     /* Ligero espaciado */
-  color: #2c3e50;            /* Mantén tu color corporativo */
-  margin-bottom: 1.2rem;     /* Separación con los controles */
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); /* Sombra sutil */
+  font-weight: 700;
+  font-size: 2.4rem;
+  letter-spacing: 0.5px;
+  color: #2c3e50;
+  margin-bottom: 1.2rem;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 h1 {
@@ -386,10 +465,21 @@ h1 {
 }
 
 .acciones button:last-child {
-  background-color: #e74c3c;
+  background-color: #e53e3e;
   color: white;
+  border: none;
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+  box-shadow: 0 4px 10px rgba(229, 72, 66, 0.5);
+  transition: background-color 0.3s, box-shadow 0.3s;
 }
 
+.acciones button:last-child:hover {
+  background-color: #c53030;
+  box-shadow: 0 6px 15px rgba(197, 48, 48, 0.7);
+}
 
 .modal {
   position: fixed;
@@ -525,14 +615,154 @@ h1 {
   list-style: none;
 }
 
-@keyframes aparecer {
+.alerta-emergente {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background-color: #38a169;
+  color: white;
+  padding: 1rem 1.5rem;
+  border-radius: 12px;
+  box-shadow: 0 6px 15px rgba(56, 161, 105, 0.6);
+  font-weight: 700;
+  font-size: 1rem;
+  z-index: 9999;
+  user-select: none;
+  cursor: default;
+  animation: aparecerEmergente 0.3s ease forwards;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+.fade-enter-to,
+.fade-leave-from {
+  opacity: 1;
+}
+
+@keyframes aparecerEmergente {
   from {
     opacity: 0;
-    transform: translateY(-8px);
+    transform: translateY(-15px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
+
+/* === Modal Eliminar Producto Mejorado === */
+.modal-eliminar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 11000;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.modal-eliminar {
+  background: #fff;
+  padding: 2rem 3rem;
+  border-radius: 16px;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 12px 25px rgba(0, 0, 0, 0.2);
+  text-align: center;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+  color: #e53e3e;
+  animation: slideIn 0.25s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-eliminar h3 {
+  margin-bottom: 1.2rem;
+  font-size: 1.8rem;
+  letter-spacing: 0.03em;
+  color: #e53e3e;
+}
+
+.modal-eliminar p {
+  margin-bottom: 2rem;
+  font-size: 1.15rem;
+  color: #555;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.modal-eliminar-botones {
+  display: flex;
+  justify-content: center;
+  gap: 1.8rem;
+}
+
+.btn-cancelar {
+  background-color: #a0aec0;
+  color: #ffffff;
+  padding: 0.6rem 1.6rem;
+  font-weight: 700;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.3s, color 0.3s;
+  box-shadow: 0 2px 6px rgba(162, 192, 160, 0.5);
+  user-select: none;
+}
+
+.btn-cancelar:hover {
+  background-color: #718096;
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(113, 128, 150, 0.7);
+}
+
+.btn-eliminar-confirmar {
+  background-color: #e53e3e;
+  color: white;
+  padding: 0.6rem 1.8rem;
+  font-weight: 700;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.3s, box-shadow 0.3s;
+  box-shadow: 0 4px 12px rgba(229, 62, 62, 0.6);
+  user-select: none;
+}
+
+.btn-eliminar-confirmar:hover {
+  background-color: #c53030;
+  box-shadow: 0 6px 18px rgba(197, 48, 48, 0.8);
+}
+
+.modal-eliminar .icono-alerta {
+  font-size: 3.5rem;
+  margin-bottom: 1rem;
+  color: #e53e3e;
+  animation: aparecer 0.4s ease;
+}
+
+.alerta-caducados {
+  border-left-color: #e53e3e !important;
+  background-color: #fff0f0 !important;
+  color: #9b2c2c !important;
+}
+
 </style>

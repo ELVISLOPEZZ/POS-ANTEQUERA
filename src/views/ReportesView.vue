@@ -2,155 +2,238 @@
   <div class="reporte-ventas">
     <h1>Reporte de Ventas</h1>
 
-    <label>Filtrar por fecha:</label>
-    <input type="date" v-model="fechaInicio" /> a
-    <input type="date" v-model="fechaFin" />
+    <!-- Filtros -->
+    <div class="filtros">
+      <label>Fecha:</label>
+      <input type="date" v-model="fechaInicio" /> a
+      <input type="date" v-model="fechaFin" />
 
+      <label>Método de pago:</label>
+      <select v-model="filtroMetodo">
+        <option value="">Todos</option>
+        <option value="efectivo">Efectivo</option>
+        <option value="tarjeta">Tarjeta</option>
+        <option value="transferencia">Transferencia</option>
+      </select>
+
+      <label>Cajero:</label>
+      <input type="text" v-model="filtroCajero" placeholder="Nombre del cajero" />
+
+      <label>Sucursal:</label>
+      <select v-model="filtroSucursal">
+        <option value="">Todas</option>
+        <option value="SUCURSAL1">Sucursal 1</option>
+        <option value="SUCURSAL2">Sucursal 2</option>
+        <option value="SUCURSAL3">Sucursal 3</option>
+      </select>
+    </div>
+
+    <!-- KPIs -->
+    <div class="resumen">
+      <p>Total de Ventas: <strong>{{ ventasFiltradas.length }}</strong></p>
+      <p>Ingresos Totales: <strong>${{ ingresosTotales.toFixed(2) }}</strong></p>
+      <p>Promedio por Venta: <strong>${{ promedioVenta.toFixed(2) }}</strong></p>
+    </div>
+
+    <!-- Tabla -->
     <table>
       <thead>
         <tr>
+          <th>ID</th>
           <th>Fecha</th>
+          <th>Cajero</th>
+          <th>Sucursal</th>
           <th>Total</th>
           <th>Método de pago</th>
+          <th>Detalles</th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="venta in ventasFiltradas" :key="venta.id">
+          <td>{{ venta.id }}</td>
           <td>{{ new Date(venta.fecha).toLocaleString() }}</td>
-          <td>${{ venta.total }}</td>
+          <td>{{ venta.usuario?.nombre || 'N/A' }}</td>
+          <td>{{ venta.usuario?.sucursal || 'N/A' }}</td>
+          <td>${{ venta.total.toFixed(2) }}</td>
           <td>{{ venta.metodoPago }}</td>
+          <td><button class="ver-detalle" @click="verDetalle(venta)">🔍 Ver</button></td>
         </tr>
       </tbody>
     </table>
 
-    <p><strong>Ingresos Totales: ${{ ingresosTotales }}</strong></p>
-
-    <!-- Botones de exportación -->
+    <!-- Botones exportar -->
     <div class="export-buttons">
       <button @click="exportarPDF">Exportar a PDF</button>
       <button @click="exportarExcel">Exportar a Excel</button>
     </div>
+
+    <!-- Modal de detalles -->
+    <ProductoVentaItem v-if="ventaSeleccionada" :venta="ventaSeleccionada" @cerrar="ventaSeleccionada = null" />
   </div>
 </template>
 
 <script>
+import ProductoVentaItem from '../components/ProductoVentaItem.vue'
 import jsPDF from 'jspdf'
 import 'jspdf-autotable'
 import * as XLSX from 'xlsx'
 import { saveAs } from 'file-saver'
 
 export default {
+  components: { ProductoVentaItem },
   props: ['ventas'],
   data() {
+    const hoy = new Date().toISOString().split('T')[0]
     return {
-      fechaInicio: '',
-      fechaFin: ''
-    };
+      fechaInicio: hoy,
+      fechaFin: hoy,
+      filtroMetodo: '',
+      filtroCajero: '',
+      filtroSucursal: '',
+      ventaSeleccionada: null
+    }
   },
   computed: {
     ventasFiltradas() {
       return this.ventas.filter(venta => {
-        const fechaVenta = new Date(venta.fecha);
-        const inicio = this.fechaInicio ? new Date(this.fechaInicio) : null;
-        const fin = this.fechaFin ? new Date(this.fechaFin) : null;
-        if (inicio && fechaVenta < inicio) return false;
-        if (fin && fechaVenta > fin) return false;
-        return true;
-      });
+        const fechaVenta = new Date(venta.fecha)
+        const inicio = new Date(this.fechaInicio)
+        const fin = new Date(this.fechaFin)
+        const dentroDeRango = fechaVenta >= inicio && fechaVenta <= new Date(fin.getTime() + 86400000 - 1)
+        const coincideMetodo = this.filtroMetodo ? venta.metodoPago === this.filtroMetodo : true
+        const coincideCajero = this.filtroCajero ? venta.usuario?.nombre?.toLowerCase().includes(this.filtroCajero.toLowerCase()) : true
+        const coincideSucursal = this.filtroSucursal ? (venta.usuario?.sucursal === this.filtroSucursal) : true
+        return dentroDeRango && coincideMetodo && coincideCajero && coincideSucursal
+      })
     },
     ingresosTotales() {
-      return this.ventasFiltradas.reduce((sum, venta) => sum + venta.total, 0);
+      return this.ventasFiltradas.reduce((sum, v) => sum + v.total, 0)
+    },
+    promedioVenta() {
+      return this.ventasFiltradas.length ? this.ingresosTotales / this.ventasFiltradas.length : 0
     }
   },
   methods: {
+    verDetalle(venta) {
+      this.ventaSeleccionada = JSON.parse(JSON.stringify(venta))
+    },
     exportarPDF() {
-      const doc = new jsPDF();
-      doc.text("Reporte de Ventas", 14, 10);
+      const doc = new jsPDF()
+      doc.text("Reporte de Ventas", 14, 10)
       const rows = this.ventasFiltradas.map(v => [
+        v.id,
         new Date(v.fecha).toLocaleString(),
-        `$${v.total}`,
+        v.usuario?.nombre || 'N/A',
+        v.usuario?.sucursal || 'N/A',
+        `$${v.total.toFixed(2)}`,
         v.metodoPago
-      ]);
+      ])
       doc.autoTable({
-        head: [["Fecha", "Total", "Método de Pago"]],
+        head: [["ID", "Fecha", "Cajero", "Sucursal", "Total", "Método de Pago"]],
         body: rows,
         startY: 20
-      });
-      doc.save("reporte_ventas.pdf");
+      })
+      doc.save("reporte_ventas.pdf")
     },
     exportarExcel() {
       const data = this.ventasFiltradas.map(v => ({
+        ID: v.id,
         Fecha: new Date(v.fecha).toLocaleString(),
+        Cajero: v.usuario?.nombre || 'N/A',
+        Sucursal: v.usuario?.sucursal || 'N/A',
         Total: v.total,
         MetodoPago: v.metodoPago
-      }));
-      const worksheet = XLSX.utils.json_to_sheet(data);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Ventas");
-      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-      const blob = new Blob([excelBuffer], { type: 'application/octet-stream' });
-      saveAs(blob, 'reporte_ventas.xlsx');
+      }))
+      const ws = XLSX.utils.json_to_sheet(data)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, "Ventas")
+      const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+      const blob = new Blob([buffer], { type: 'application/octet-stream' })
+      saveAs(blob, 'reporte_ventas.xlsx')
     }
   }
-};
+}
 </script>
 
-<style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
 
+
+
+
+
+<style scoped>
 .reporte-ventas {
-  max-width: 1000px;
+  max-width: 1100px;
   margin: auto;
   padding: 2rem;
-  font-family: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background: #f9f9f9;
-  border-radius: 10px;
-  box-shadow: 0 0 12px rgba(0,0,0,0.08);
+  background: #fff;
+  font-family: 'Poppins', sans-serif;
 }
-
-.reporte-ventas h1 {
-  font-weight: 700;
-  font-size: 2.4rem;
-  letter-spacing: 0.5px;
-  color: #2c3e50;
-  margin-bottom: 1.5rem;
-  text-align: center;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+.filtros {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
 }
-
+.filtros label {
+  font-weight: 600;
+  color: #333;
+}
+.filtros input,
+.filtros select {
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-family: 'Poppins', sans-serif;
+}
+.resumen {
+  margin-bottom: 1rem;
+  background: #f1f8f2;
+  padding: 1rem;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.resumen p {
+  font-weight: 600;
+  margin: 0.5rem 0;
+}
 table {
   width: 100%;
   border-collapse: collapse;
   margin-top: 1rem;
-  background-color: white;
+  background-color: #fefefe;
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.1);
 }
-
 th, td {
   padding: 1rem;
   text-align: center;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid #eee;
   font-size: 0.95rem;
 }
-
 th {
   background-color: #2e7d32;
   color: white;
-  font-weight: 600;
   text-transform: uppercase;
 }
-
-tr:last-child td {
-  border-bottom: none;
+.ver-detalle {
+  background-color: #388e3c;
+  color: white;
+  border: none;
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.3s ease;
 }
-
+.ver-detalle:hover {
+  background-color: #256429;
+}
 .export-buttons {
   margin-top: 2rem;
   text-align: right;
 }
-
 .export-buttons button {
   margin-left: 1rem;
   padding: 0.6rem 1.2rem;
@@ -162,9 +245,7 @@ tr:last-child td {
   cursor: pointer;
   transition: background-color 0.3s ease;
 }
-
 .export-buttons button:hover {
   background-color: #2e7d32;
 }
 </style>
-
