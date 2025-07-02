@@ -73,10 +73,9 @@
           Tarjeta
         </label>
         <label>
-        <input type="radio" value="transferencia" v-model="metodoPago" />
+          <input type="radio" value="transferencia" v-model="metodoPago" />
           Transferencia
         </label>
-
       </div>
 
       <div v-if="totalAcumulado > 0" class="recuadro-total-acumulado">
@@ -129,39 +128,80 @@ export default {
       return this.carrito.reduce((suma, item) => suma + item.precio * item.cantidad, 0);
     }
   },
+
   mounted() {
-    const sucursal = localStorage.getItem('store_code');
-    if (sucursal) {
-      this.productos = obtenerProductosPorSucursal(sucursal);
-    } else {
-      alert('Error: No se pudo determinar la sucursal.');
-    }
+  const sucursal = localStorage.getItem('store_code');
+  if (!sucursal) {
+    alert('Error: No se pudo determinar la sucursal.');
+    return;
+  }
 
-    const fechaGuardada = localStorage.getItem('fecha_total_acumulado');
-    const totalGuardado = localStorage.getItem('total_acumulado_dia');
-    const cierresGuardados = localStorage.getItem('cierres_caja');
-    const hoy = new Date().toISOString().slice(0, 10);
+  this.productos = obtenerProductosPorSucursal(sucursal);
 
-    if (fechaGuardada !== hoy) {
-      this.totalAcumulado = 0;
-      this.ventasRealizadas = [];
-      if (cierresGuardados) {
-        this.cierresCaja = JSON.parse(cierresGuardados);
-      }
-      localStorage.setItem('fecha_total_acumulado', hoy);
-      localStorage.setItem('total_acumulado_dia', '0');
-    } else {
-      this.totalAcumulado = totalGuardado ? parseFloat(totalGuardado) : 0;
-      this.ventasRealizadas = JSON.parse(localStorage.getItem('ventas_realizadas')) || [];
-      this.cierresCaja = cierresGuardados ? JSON.parse(cierresGuardados) : [];
-    }
+  const hoy = new Date().toISOString().slice(0, 10);
+  const claveTotal = `total_acumulado_${sucursal}_${hoy}`;
+  const totalGuardado = parseFloat(localStorage.getItem(claveTotal)) || 0;
 
-    this.$nextTick(() => {
-      this.$refs.inputCodigo?.focus();
-    });
+  this.totalAcumulado = totalGuardado;
 
-    window.addEventListener('keydown', this.detectarEscape);
-  },
+  // Filtrar ventas solo de esta sucursal
+  const todasVentas = JSON.parse(localStorage.getItem('ventas_realizadas')) || [];
+  this.ventasRealizadas = todasVentas.filter(v => v.sucursal === sucursal);
+
+  this.$nextTick(() => {
+    this.$refs.inputCodigo?.focus();
+  });
+
+  window.addEventListener('keydown', this.detectarEscape);
+},
+
+
+finalizarVenta() {
+  this.carrito.forEach(item => {
+    const prod = this.productos.find(p => p.id === item.id);
+    if (prod) prod.stock -= item.cantidad;
+  });
+
+  const usuarioActual = JSON.parse(localStorage.getItem('usuario')) || { username: 'desconocido', sucursal: 'sin_sucursal' };
+  const sucursal = usuarioActual.sucursal || 'sin_sucursal';
+
+  const venta = {
+    id: Date.now(),
+    productos: JSON.parse(JSON.stringify(this.carrito)),
+    total: this.total,
+    metodoPago: this.metodoPago,
+    fecha: new Date().toISOString(),
+    usuario: {
+      nombre: usuarioActual.username,
+      sucursal: sucursal
+    },
+    sucursal: sucursal
+  };
+
+  // Guardar venta
+  const todasVentas = JSON.parse(localStorage.getItem('ventas_realizadas')) || [];
+  todasVentas.push(venta);
+  localStorage.setItem('ventas_realizadas', JSON.stringify(todasVentas));
+
+  // Total por sucursal y fecha
+  const hoy = new Date().toISOString().slice(0, 10);
+  const claveTotal = `total_acumulado_${sucursal}_${hoy}`;
+  const totalAnterior = parseFloat(localStorage.getItem(claveTotal)) || 0;
+  const nuevoTotal = totalAnterior + this.total;
+
+  localStorage.setItem(claveTotal, nuevoTotal.toString());
+  this.totalAcumulado = nuevoTotal;
+
+  this.$emit('nueva-venta', venta);
+  this.carritoAnterior = [...this.carrito];
+  this.totalAnterior = this.total;
+  this.metodoPagoAnterior = this.metodoPago;
+  this.ventaFinalizada = true;
+  this.carrito = [];
+  this.codigoEscaneado = '';
+},
+
+
   beforeUnmount() {
     window.removeEventListener('keydown', this.detectarEscape);
   },
@@ -203,102 +243,107 @@ export default {
         this.carrito = this.carrito.filter(p => p.id !== item.id);
       }
     },
-    
-finalizarVenta() {
-  // Actualizar stock en productos
-  this.carrito.forEach(item => {
-    const prod = this.productos.find(p => p.id === item.id);
-    if (prod) prod.stock -= item.cantidad;
-  });
 
-  // Obtener usuario actual desde localStorage
-const usuarioActual = JSON.parse(localStorage.getItem('usuario')) || {
-  username: 'desconocido',
-  sucursal: 'sin_sucursal'
-};
+    finalizarVenta() {
+      // Actualizar stock en productos
+      this.carrito.forEach(item => {
+        const prod = this.productos.find(p => p.id === item.id);
+        if (prod) prod.stock -= item.cantidad;
+      });
 
+      // Obtener usuario actual desde localStorage
+      const usuarioActual = JSON.parse(localStorage.getItem('usuario')) || {
+        username: 'desconocido',
+        sucursal: 'sin_sucursal'
+      };
+      const sucursalActual = usuarioActual.sucursal || localStorage.getItem('store_code');
 
-  // Crear objeto de venta
-  const venta = {
-    id: Date.now(),
-    productos: JSON.parse(JSON.stringify(this.carrito)),
-    total: this.total,
-    metodoPago: this.metodoPago,
-    fecha: new Date().toISOString(),
-    usuario: {
-      nombre: usuarioActual.username,
-      sucursal: usuarioActual.sucursal
-},
-sucursal: usuarioActual.sucursal
-  };
+      // Crear objeto de venta
+      const venta = {
+        id: Date.now(),
+        productos: JSON.parse(JSON.stringify(this.carrito)),
+        total: this.total,
+        metodoPago: this.metodoPago,
+        fecha: new Date().toISOString(),
+        usuario: {
+          nombre: usuarioActual.username,
+          sucursal: sucursalActual
+        },
+        sucursal: sucursalActual
+      };
 
-  // Guardar venta
-  this.ventasRealizadas.push(venta);
-  localStorage.setItem('ventas_realizadas', JSON.stringify(this.ventasRealizadas));
+      // Guardar venta
+      this.ventasRealizadas.push(venta);
+      localStorage.setItem('ventas_realizadas', JSON.stringify(this.ventasRealizadas));
 
-  // Guardar totales acumulados por día
-  this.totalAcumulado += this.total;
-  localStorage.setItem('total_acumulado_dia', this.totalAcumulado.toString());
-  const hoy = new Date().toISOString().slice(0, 10);
-  localStorage.setItem('fecha_total_acumulado', hoy);
+      // Guardar totales acumulados por sucursal
+      let totalesPorSucursal = JSON.parse(localStorage.getItem('total_acumulado_por_sucursal')) || {};
+      totalesPorSucursal[sucursalActual] = (totalesPorSucursal[sucursalActual] || 0) + this.total;
+      localStorage.setItem('total_acumulado_por_sucursal', JSON.stringify(totalesPorSucursal));
 
-  // Emitir evento y limpiar estados
-  this.$emit('nueva-venta', venta);
-  this.carritoAnterior = [...this.carrito];
-  this.totalAnterior = this.total;
-  this.metodoPagoAnterior = this.metodoPago;
-  this.ventaFinalizada = true;
-  this.carrito = [];
-  this.codigoEscaneado = '';
-},
+      this.totalAcumulado = totalesPorSucursal[sucursalActual]; // actualizar local
 
-imprimirTicket() {
-  const ticketContent = `
-    <div style="text-align: left; font-size: 12px; font-family: monospace;">
-      <h2 style="text-align: center; font-size: 16px;">POS OAXACA DE ANTEQUERA</h2>
-      <p>Fecha: ${new Date().toLocaleString()}</p>
-      <hr />
-      <p><strong>Productos:</strong></p>
-      ${this.carritoAnterior
-        .map(
-          (item) =>
-            `${item.nombre} x${item.cantidad}  $${(item.precio * item.cantidad).toFixed(2)}`
-        )
-        .join('<br>')}
-      <hr />
-      <p><strong>Total: $${this.totalAnterior.toFixed(2)}</strong></p>
-      <p>Método de pago: ${this.metodoPagoAnterior}</p>
-      <p style="text-align: center;">¡Gracias por su compra!</p>
-      <br><br><br> <!-- espacio para cortar -->
-    </div>
-  `;
-  const printWindow = window.open('', '', 'width=300,height=600');
-  if (printWindow) {
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Ticket</title>
-          <style>
-            @media print {
-              body {
-                margin: 0;
-                padding: 0;
-                font-family: monospace;
-                font-size: 12px;
-              }
-            }
-          </style>
-        </head>
-        <body onload="window.print(); window.close();">
-          ${ticketContent}
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-  }
-  // Oculta el ticket en pantalla principal
-  this.ventaFinalizada = false;
-},
+      // Guardar fecha del día
+      const hoy = new Date().toISOString().slice(0, 10);
+      localStorage.setItem('fecha_total_acumulado', hoy);
+
+      // Emitir evento y limpiar estados
+      this.$emit('nueva-venta', venta);
+      this.carritoAnterior = [...this.carrito];
+      this.totalAnterior = this.total;
+      this.metodoPagoAnterior = this.metodoPago;
+      this.ventaFinalizada = true;
+      this.carrito = [];
+      this.codigoEscaneado = '';
+    },
+
+    imprimirTicket() {
+      const ticketContent = `
+        <div style="text-align: left; font-size: 12px; font-family: monospace;">
+          <h2 style="text-align: center; font-size: 16px;">POS OAXACA DE ANTEQUERA</h2>
+          <p>Fecha: ${new Date().toLocaleString()}</p>
+          <hr />
+          <p><strong>Productos:</strong></p>
+          ${this.carritoAnterior
+            .map(
+              (item) =>
+                `${item.nombre} x${item.cantidad}  $${(item.precio * item.cantidad).toFixed(2)}`
+            )
+            .join('<br>')}
+          <hr />
+          <p><strong>Total: $${this.totalAnterior.toFixed(2)}</strong></p>
+          <p>Método de pago: ${this.metodoPagoAnterior}</p>
+          <p style="text-align: center;">¡Gracias por su compra!</p>
+          <br><br><br> <!-- espacio para cortar -->
+        </div>
+      `;
+      const printWindow = window.open('', '', 'width=300,height=600');
+      if (printWindow) {
+        printWindow.document.write(`
+          <html>
+            <head>
+              <title>Ticket</title>
+              <style>
+                @media print {
+                  body {
+                    margin: 0;
+                    padding: 0;
+                    font-family: monospace;
+                    font-size: 12px;
+                  }
+                }
+              </style>
+            </head>
+            <body onload="window.print(); window.close();">
+              ${ticketContent}
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+      }
+      // Oculta el ticket en pantalla principal
+      this.ventaFinalizada = false;
+    },
     procesarEscaneo() {
       const codigo = this.codigoEscaneado.trim();
       if (!codigo) return;
@@ -329,6 +374,7 @@ imprimirTicket() {
   }
 };
 </script>
+
 
 
 
