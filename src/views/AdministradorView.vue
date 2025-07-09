@@ -1,6 +1,6 @@
 <template>
   <div class="admin-view">
-    <h1>Gestión de Personal y Sucursales</h1>
+    <h1>Gestión de Personal</h1>
 
     <!-- FORMULARIO -->
     <form @submit.prevent="registrarUsuario" class="formulario">
@@ -57,7 +57,7 @@
           <td>{{ user.password }}</td>
           <td>{{ user.rol }}</td>
           <td>{{ user.sucursal }}</td>
-          <td>
+          <td class="acciones">
             <button class="btn-eliminar" @click="confirmarEliminacion(index)">Eliminar</button>
             <button class="btn-editar" @click="editarUsuario(index)">Editar</button>
           </td>
@@ -103,12 +103,10 @@ export default {
   },
   methods: {
     cargarUsuarios() {
-      // Si hay usuarios en localStorage, los carga
       let usuariosLS = JSON.parse(localStorage.getItem('usuarios_custom'))
       if (usuariosLS && usuariosLS.length) {
         this.usuarios = usuariosLS
       } else {
-        // Si no hay, carga los base de auth.js y guarda en localStorage
         this.usuarios = [...usuariosBase]
         localStorage.setItem('usuarios_custom', JSON.stringify(this.usuarios))
       }
@@ -125,7 +123,6 @@ export default {
         return
       }
 
-      // Verifica que el username sea único (excepto cuando edita)
       const existeUsuario = this.usuarios.some(
         (u, i) =>
           u.username === this.nuevoUsuario.username &&
@@ -147,7 +144,6 @@ export default {
         this.mensaje = 'Usuario registrado exitosamente.'
       }
 
-      // Actualiza localStorage
       localStorage.setItem('usuarios_custom', JSON.stringify(this.usuarios))
 
       this.nuevoUsuario = { username: '', password: '', rol: '', sucursal: '' }
@@ -241,6 +237,10 @@ export default {
   border-radius: 6px;
   cursor: pointer;
   transition: background-color 0.3s ease;
+  width: 100%;
+  max-width: 220px;
+  display: block;
+  margin: 0 auto;
 }
 .btn-guardar:hover {
   background: #2e7d32;
@@ -254,42 +254,45 @@ export default {
   overflow: hidden;
   box-shadow: 0 1px 6px rgba(0,0,0,0.1);
 }
+
 .tabla-usuarios th,
 .tabla-usuarios td {
   padding: 1rem;
   text-align: center;
   border-bottom: 1px solid #eee;
+  word-wrap: break-word;
 }
+
 .tabla-usuarios th {
   background: #e8f5e9;
   color: #2e7d32;
   font-weight: 600;
 }
+
 .tabla-usuarios tr:last-child td {
   border-bottom: none;
 }
 
-.btn-eliminar {
-  background: #e53935;
-  color: white;
-  border: none;
+.btn-eliminar,
+.btn-editar {
   padding: 0.5rem 1rem;
   border-radius: 5px;
   cursor: pointer;
-  margin-right: 0.5rem;
+  border: none;
+  color: white;
   transition: background-color 0.3s ease;
+  margin: 0 0.2rem 0.2rem 0;
+}
+
+.btn-eliminar {
+  background: #e53935;
 }
 .btn-eliminar:hover {
   background: #b71c1c;
 }
+
 .btn-editar {
   background: #42a5f5;
-  color: white;
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 5px;
-  cursor: pointer;
-  transition: background-color 0.3s ease;
 }
 .btn-editar:hover {
   background: #0d47a1;
@@ -305,6 +308,7 @@ export default {
   font-weight: bold;
 }
 
+/* Modal */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -328,11 +332,6 @@ export default {
   text-align: center;
 }
 
-.modal-contenido h2 {
-  color: #2e7d32;
-  margin-bottom: 1rem;
-}
-
 .modal-botones {
   margin-top: 1.5rem;
   display: flex;
@@ -348,6 +347,7 @@ export default {
   border-radius: 5px;
   cursor: pointer;
 }
+
 .btn-cancelar {
   background: #757575;
   color: white;
@@ -355,5 +355,53 @@ export default {
   border: none;
   border-radius: 5px;
   cursor: pointer;
+}
+
+/* Responsive */
+
+@media (max-width: 700px) {
+  .admin-view {
+    padding: 1rem;
+  }
+
+  .formulario {
+    padding: 1rem;
+  }
+
+  .btn-guardar {
+    max-width: 100%;
+  }
+
+  .tabla-usuarios th,
+  .tabla-usuarios td {
+    padding: 0.6rem 0.3rem;
+    font-size: 0.9rem;
+  }
+
+  .tabla-usuarios {
+    font-size: 0.9rem;
+  }
+
+  /* Hacer que la tabla pueda hacer scroll horizontal */
+  .tabla-usuarios {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  /* Botones acciones en bloque para móvil */
+  .acciones {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .btn-eliminar,
+  .btn-editar {
+    margin: 0;
+    width: 100%;
+    font-size: 0.9rem;
+    padding: 0.5rem 0;
+  }
 }
 </style>

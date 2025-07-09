@@ -1,3 +1,4 @@
+-------------------------------------------------------NO SE ESTA USANDO EN NINGUN LUGAR-------------------------------------------------------
 <template>
   <div class="producto-item">
     <h3>{{ producto.nombre }}</h3>

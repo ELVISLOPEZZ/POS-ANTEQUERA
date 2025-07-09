@@ -1,3 +1,4 @@
+--------------------------------------------------------NO SE ESTA USANDO EN NINGUN LUGAR-------------------------------------------------------
 <template>
   <div>
     <CajaCobro @nueva-venta="agregarVenta" />

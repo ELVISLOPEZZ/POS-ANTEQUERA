@@ -1,10 +1,33 @@
+<!-- CajaView.vue -->
 <template>
   <div class="caja-view">
     <h1 class="titulo">Caja de Cobro</h1>
 
+    <!-- MODAL DE CONFIRMACIÓN -->
+    <div v-if="modalVisible" class="modal-overlay">
+      <div class="modal-contenido">
+        <p>¿Eliminar "<strong>{{ itemAEliminar?.nombre }}</strong>" del carrito?</p>
+        <div class="modal-botones">
+          <button @click="confirmarEliminacion(true)" class="btn-confirmar">Sí</button>
+          <button @click="confirmarEliminacion(false)" class="btn-cancelar">Cancelar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Buscar producto -->
     <section class="productos">
-      <h2>Productos disponibles</h2>
-      <div v-for="producto in productos" :key="producto.id" class="producto-card">
+      <h2>Buscar producto por nombre</h2>
+      <input
+        v-model="busquedaProducto"
+        type="text"
+        placeholder="Escribe el nombre del producto"
+        class="input-busqueda"
+      />
+      <div
+        v-for="producto in productosFiltrados"
+        :key="producto.id"
+        class="producto-card"
+      >
         <div class="info-producto">
           <img
             v-if="producto.imagen"
@@ -19,15 +42,22 @@
             <p class="codigo">Código: {{ producto.codigoBarras }}</p>
           </div>
         </div>
-        <button @click="agregarAlCarrito(producto)" class="btn-agregar" :disabled="producto.stock === 0">
+        <button
+          @click="agregarAlCarrito(producto)"
+          class="btn-agregar"
+          :disabled="producto.stock === 0"
+        >
           Agregar
         </button>
       </div>
+      <p v-if="busquedaProducto && productosFiltrados.length === 0" class="no-resultados">
+        ❌ No se encontraron productos con ese nombre.
+      </p>
     </section>
 
-    <!-- Input para escanear código de barras -->
+    
+    <!-- Código de barras -->
     <div class="lector-codigo">
-      <label for="codigoBarra">Escanear Código de Barras:</label>
       <input
         id="codigoBarra"
         v-model="codigoEscaneado"
@@ -36,17 +66,22 @@
         pattern="\d*"
         maxlength="13"
         @keyup.enter="procesarEscaneo"
-        placeholder="Escanea o escribe el código y presiona Enter"
+        placeholder="Escanea o escribe el código del producto"
         ref="inputCodigo"
         @focus="inputActivo = true"
         @blur.capture="inputActivo = false"
       />
     </div>
 
+        <!-- Alerta si no se encuentra producto -->
+    <div v-if="productoNoEncontrado" class="alerta-error">
+      ❌ Producto no encontrado con ese código de barras.
+    </div>
+
+    <!-- Carrito -->
     <section class="carrito">
       <h2>Carrito</h2>
       <div v-if="carrito.length === 0" class="empty-carrito">No hay productos en el carrito.</div>
-
       <ul v-else class="lista-carrito">
         <li v-for="item in carrito" :key="item.id" class="item-carrito">
           <span>{{ item.nombre }}</span>
@@ -56,7 +91,7 @@
             <button @click="cambiarCantidad(item, 1)" :disabled="item.cantidad >= item.stock">+</button>
           </div>
           <span class="subtotal">$ {{ (item.precio * item.cantidad).toFixed(2) }}</span>
-          <button class="btn-eliminar" @click="eliminarDelCarrito(item)">🗑</button>
+          <button class="btn-eliminar" @click="mostrarModal(item)">🗑</button>
         </li>
       </ul>
 
@@ -64,18 +99,9 @@
 
       <div class="metodo-pago">
         <label>Método de pago:</label>
-        <label>
-          <input type="radio" value="efectivo" v-model="metodoPago" />
-          Efectivo
-        </label>
-        <label>
-          <input type="radio" value="tarjeta" v-model="metodoPago" />
-          Tarjeta
-        </label>
-        <label>
-          <input type="radio" value="transferencia" v-model="metodoPago" />
-          Transferencia
-        </label>
+        <label><input type="radio" value="efectivo" v-model="metodoPago" /> Efectivo</label>
+        <label><input type="radio" value="tarjeta" v-model="metodoPago" /> Tarjeta</label>
+        <label><input type="radio" value="transferencia" v-model="metodoPago" /> Transferencia</label>
       </div>
 
       <div v-if="totalAcumulado > 0" class="recuadro-total-acumulado">
@@ -87,6 +113,7 @@
       </button>
     </section>
 
+    <!-- Ticket -->
     <section v-if="ventaFinalizada" class="ticket" id="ticket">
       <h2>Ticket de Venta</h2>
       <ul>
@@ -97,18 +124,21 @@
       <p><strong>Total: ${{ totalAnterior.toFixed(2) }}</strong></p>
       <p>Método de pago: {{ metodoPagoAnterior }}</p>
       <p>¡Gracias por su compra!</p>
-
       <button @click="imprimirTicket" class="btn-imprimir">Imprimir Ticket</button>
     </section>
   </div>
 </template>
 
 <script>
-import { obtenerProductosPorSucursal } from '../productos.js';
+// Conserva tus imports
+import { obtenerProductosPorSucursal, actualizarProductosPorSucursal } from '../productos.js'
+
+
 
 export default {
   data() {
     return {
+      sucursal: localStorage.getItem('store_code') || 'sin_sucursal',
       productos: [],
       carrito: [],
       codigoEscaneado: '',
@@ -118,106 +148,50 @@ export default {
       metodoPagoAnterior: '',
       totalAnterior: 0,
       totalAcumulado: 0,
-      cierresCaja: [],
       ventasRealizadas: [],
-      inputActivo: false
+      inputActivo: false,
+      busquedaProducto: '',
+      productoNoEncontrado: false,
+      modalVisible: false,
+      itemAEliminar: null
     };
   },
   computed: {
     total() {
       return this.carrito.reduce((suma, item) => suma + item.precio * item.cantidad, 0);
+    },
+    productosFiltrados() {
+      if (!this.busquedaProducto) return [];
+      const texto = this.busquedaProducto.toLowerCase();
+      return this.productos.filter(p => p.nombre.toLowerCase().includes(texto));
     }
   },
-
   mounted() {
-  const sucursal = localStorage.getItem('store_code');
-  if (!sucursal) {
-    alert('Error: No se pudo determinar la sucursal.');
-    return;
-  }
+    const sucursal = localStorage.getItem('store_code');
+    if (!sucursal) return alert('Error: No se pudo determinar la sucursal.');
 
-  this.productos = obtenerProductosPorSucursal(sucursal);
+    this.productos = obtenerProductosPorSucursal(sucursal);
 
-  const hoy = new Date().toISOString().slice(0, 10);
-  const claveTotal = `total_acumulado_${sucursal}_${hoy}`;
-  const totalGuardado = parseFloat(localStorage.getItem(claveTotal)) || 0;
+    const hoy = new Date().toISOString().slice(0, 10);
+    const claveTotal = `total_acumulado_${sucursal}_${hoy}`;
+    this.totalAcumulado = parseFloat(localStorage.getItem(claveTotal)) || 0;
 
-  this.totalAcumulado = totalGuardado;
+    const todasVentas = JSON.parse(localStorage.getItem('ventas_realizadas')) || [];
+    this.ventasRealizadas = todasVentas.filter(v => v.sucursal === sucursal);
 
-  // Filtrar ventas solo de esta sucursal
-  const todasVentas = JSON.parse(localStorage.getItem('ventas_realizadas')) || [];
-  this.ventasRealizadas = todasVentas.filter(v => v.sucursal === sucursal);
-
-  this.$nextTick(() => {
-    this.$refs.inputCodigo?.focus();
-  });
-
-  window.addEventListener('keydown', this.detectarEscape);
-},
-
-
-finalizarVenta() {
-  this.carrito.forEach(item => {
-    const prod = this.productos.find(p => p.id === item.id);
-    if (prod) prod.stock -= item.cantidad;
-  });
-
-  const usuarioActual = JSON.parse(localStorage.getItem('usuario')) || { username: 'desconocido', sucursal: 'sin_sucursal' };
-  const sucursal = usuarioActual.sucursal || 'sin_sucursal';
-
-  const venta = {
-    id: Date.now(),
-    productos: JSON.parse(JSON.stringify(this.carrito)),
-    total: this.total,
-    metodoPago: this.metodoPago,
-    fecha: new Date().toISOString(),
-    usuario: {
-      nombre: usuarioActual.username,
-      sucursal: sucursal
-    },
-    sucursal: sucursal
-  };
-
-  // Guardar venta
-  const todasVentas = JSON.parse(localStorage.getItem('ventas_realizadas')) || [];
-  todasVentas.push(venta);
-  localStorage.setItem('ventas_realizadas', JSON.stringify(todasVentas));
-
-  // Total por sucursal y fecha
-  const hoy = new Date().toISOString().slice(0, 10);
-  const claveTotal = `total_acumulado_${sucursal}_${hoy}`;
-  const totalAnterior = parseFloat(localStorage.getItem(claveTotal)) || 0;
-  const nuevoTotal = totalAnterior + this.total;
-
-  localStorage.setItem(claveTotal, nuevoTotal.toString());
-  this.totalAcumulado = nuevoTotal;
-
-  this.$emit('nueva-venta', venta);
-  this.carritoAnterior = [...this.carrito];
-  this.totalAnterior = this.total;
-  this.metodoPagoAnterior = this.metodoPago;
-  this.ventaFinalizada = true;
-  this.carrito = [];
-  this.codigoEscaneado = '';
-},
-
-
+    this.$nextTick(() => this.$refs.inputCodigo?.focus());
+    window.addEventListener('keydown', this.detectarEscape);
+  },
   beforeUnmount() {
     window.removeEventListener('keydown', this.detectarEscape);
   },
   methods: {
     agregarAlCarrito(producto) {
-      if (producto.stock === 0) {
-        alert('Producto sin stock');
-        return;
-      }
+      if (producto.stock === 0) return alert('Producto sin stock');
       const encontrado = this.carrito.find(p => p.id === producto.id);
       if (encontrado) {
-        if (encontrado.cantidad < producto.stock) {
-          encontrado.cantidad++;
-        } else {
-          alert('No hay más stock disponible');
-        }
+        if (encontrado.cantidad < producto.stock) encontrado.cantidad++;
+        else alert('No hay más stock disponible');
       } else {
         this.carrito.push({ ...producto, cantidad: 1 });
       }
@@ -225,40 +199,50 @@ finalizarVenta() {
     },
     cambiarCantidad(item, delta) {
       const nuevaCantidad = item.cantidad + delta;
-      if (nuevaCantidad < 1) {
-        this.eliminarDelCarrito(item);
-        return;
-      }
-
+      if (nuevaCantidad < 1) return this.mostrarModal(item);
       const original = this.productos.find(p => p.id === item.id);
-      if (original && nuevaCantidad > original.stock) {
-        alert('No hay más stock disponible');
-        return;
-      }
-
+      if (original && nuevaCantidad > original.stock) return alert('No hay más stock disponible');
       item.cantidad = nuevaCantidad;
     },
-    eliminarDelCarrito(item) {
-      if (confirm(`¿Eliminar "${item.nombre}" del carrito?`)) {
-        this.carrito = this.carrito.filter(p => p.id !== item.id);
-      }
+    mostrarModal(item) {
+      this.modalVisible = true;
+      this.itemAEliminar = item;
     },
-
-    finalizarVenta() {
-      // Actualizar stock en productos
+    confirmarEliminacion(confirmado) {
+      if (confirmado && this.itemAEliminar) {
+        this.carrito = this.carrito.filter(p => p.id !== this.itemAEliminar.id);
+      }
+      this.modalVisible = false;
+      this.itemAEliminar = null;
+    },
+    procesarEscaneo() {
+      const codigo = this.codigoEscaneado.trim();
+      if (!codigo) return;
+      const producto = this.productos.find(p => p.codigoBarras === codigo);
+      if (!producto) {
+        this.productoNoEncontrado = true;
+        setTimeout(() => (this.productoNoEncontrado = false), 3000);
+        this.codigoEscaneado = '';
+        return;
+      }
+      this.agregarAlCarrito(producto);
+      this.codigoEscaneado = '';
+    },
+finalizarVenta() {
       this.carrito.forEach(item => {
         const prod = this.productos.find(p => p.id === item.id);
         if (prod) prod.stock -= item.cantidad;
       });
 
-      // Obtener usuario actual desde localStorage
       const usuarioActual = JSON.parse(localStorage.getItem('usuario')) || {
         username: 'desconocido',
         sucursal: 'sin_sucursal'
       };
-      const sucursalActual = usuarioActual.sucursal || localStorage.getItem('store_code');
+      const sucursal = usuarioActual.sucursal || 'sin_sucursal';
 
-      // Crear objeto de venta
+        // 🔄 Guardar productos actualizados en localStorage
+  actualizarProductosPorSucursal(sucursal, this.productos);
+
       const venta = {
         id: Date.now(),
         productos: JSON.parse(JSON.stringify(this.carrito)),
@@ -267,27 +251,23 @@ finalizarVenta() {
         fecha: new Date().toISOString(),
         usuario: {
           nombre: usuarioActual.username,
-          sucursal: sucursalActual
+          sucursal: sucursal
         },
-        sucursal: sucursalActual
+        sucursal: sucursal
       };
 
-      // Guardar venta
-      this.ventasRealizadas.push(venta);
-      localStorage.setItem('ventas_realizadas', JSON.stringify(this.ventasRealizadas));
+      const todasVentas = JSON.parse(localStorage.getItem('ventas_realizadas')) || [];
+      todasVentas.push(venta);
+      localStorage.setItem('ventas_realizadas', JSON.stringify(todasVentas));
 
-      // Guardar totales acumulados por sucursal
-      let totalesPorSucursal = JSON.parse(localStorage.getItem('total_acumulado_por_sucursal')) || {};
-      totalesPorSucursal[sucursalActual] = (totalesPorSucursal[sucursalActual] || 0) + this.total;
-      localStorage.setItem('total_acumulado_por_sucursal', JSON.stringify(totalesPorSucursal));
-
-      this.totalAcumulado = totalesPorSucursal[sucursalActual]; // actualizar local
-
-      // Guardar fecha del día
       const hoy = new Date().toISOString().slice(0, 10);
-      localStorage.setItem('fecha_total_acumulado', hoy);
+      const claveTotal = `total_acumulado_${sucursal}_${hoy}`;
+      const totalAnterior = parseFloat(localStorage.getItem(claveTotal)) || 0;
+      const nuevoTotal = totalAnterior + this.total;
 
-      // Emitir evento y limpiar estados
+      localStorage.setItem(claveTotal, nuevoTotal.toString());
+      this.totalAcumulado = nuevoTotal;
+
       this.$emit('nueva-venta', venta);
       this.carritoAnterior = [...this.carrito];
       this.totalAnterior = this.total;
@@ -296,7 +276,6 @@ finalizarVenta() {
       this.carrito = [];
       this.codigoEscaneado = '';
     },
-
     imprimirTicket() {
       const ticketContent = `
         <div style="text-align: left; font-size: 12px; font-family: monospace;">
@@ -305,16 +284,13 @@ finalizarVenta() {
           <hr />
           <p><strong>Productos:</strong></p>
           ${this.carritoAnterior
-            .map(
-              (item) =>
-                `${item.nombre} x${item.cantidad}  $${(item.precio * item.cantidad).toFixed(2)}`
-            )
+            .map(item => `${item.nombre} x${item.cantidad}  $${(item.precio * item.cantidad).toFixed(2)}`)
             .join('<br>')}
           <hr />
           <p><strong>Total: $${this.totalAnterior.toFixed(2)}</strong></p>
           <p>Método de pago: ${this.metodoPagoAnterior}</p>
           <p style="text-align: center;">¡Gracias por su compra!</p>
-          <br><br><br> <!-- espacio para cortar -->
+          <br><br><br>
         </div>
       `;
       const printWindow = window.open('', '', 'width=300,height=600');
@@ -341,23 +317,7 @@ finalizarVenta() {
         `);
         printWindow.document.close();
       }
-      // Oculta el ticket en pantalla principal
       this.ventaFinalizada = false;
-    },
-    procesarEscaneo() {
-      const codigo = this.codigoEscaneado.trim();
-      if (!codigo) return;
-
-      const producto = this.productos.find(p => p.codigoBarras === codigo);
-
-      if (!producto) {
-        alert('Producto no encontrado');
-        this.codigoEscaneado = '';
-        return;
-      }
-
-      this.agregarAlCarrito(producto);
-      this.codigoEscaneado = '';
     },
     reenfocarInput() {
       setTimeout(() => {
@@ -377,33 +337,8 @@ finalizarVenta() {
 
 
 
-
 <style scoped>
-
-.caja-view h1 {
-  text-align: center;
-  font-family: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  font-weight: 700;          /* Negrita elegante */
-  font-size: 2.4rem;         /* Más grande y legible */
-  letter-spacing: 0.5px;     /* Ligero espaciado */
-  color: #2c3e50;            /* Mantén tu color corporativo */
-  margin-bottom: 1.2rem;     /* Separación con los controles */
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); /* Sombra sutil */
-}
-
-.recuadro-total-acumulado {
-  margin-top: 1rem;
-  background-color: #f1f8e9;
-  border: 2px solid #aed581;
-  border-radius: 10px;
-  padding: 1rem;
-  color: #33691e;
-  font-size: 1.2rem;
-  text-align: center;
-  font-weight: bold;
-}
-
-
+/* 🎨 TIPOGRAFÍA Y TÍTULOS */
 .caja-view {
   max-width: 900px;
   margin: auto;
@@ -414,6 +349,18 @@ finalizarVenta() {
   box-shadow: 0 0 15px rgba(0,0,0,0.1);
 }
 
+.caja-view h1 {
+  text-align: center;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+  font-size: 2.4rem;
+  letter-spacing: 0.5px;
+  color: #2c3e50;
+  margin-bottom: 1.2rem;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* ✅ LECTOR DE CÓDIGO */
 .lector-codigo {
   margin-bottom: 1rem;
   text-align: center;
@@ -422,7 +369,7 @@ finalizarVenta() {
 .lector-codigo input {
   padding: 0.5rem 1rem;
   font-size: 1.1rem;
-  width: 300px;
+  width: 330px;
   max-width: 90vw;
   border-radius: 6px;
   border: 2px solid #4caf50;
@@ -433,6 +380,39 @@ finalizarVenta() {
   border-color: #2e7d32;
 }
 
+/* 🔍 BUSCADOR */
+.input-busqueda {
+  width: 100%;
+  max-width: 500px;
+  padding: 12px 16px;
+  margin: 1rem auto 2rem auto;
+  font-size: 1rem;
+  border: 2px solid #4caf50;
+  border-radius: 8px;
+  outline: none;
+  display: block;
+  transition: all 0.3s ease;
+}
+.input-busqueda:focus {
+  border-color: #2e7d32;
+  box-shadow: 0 0 8px rgba(46, 125, 50, 0.4);
+  transform: scale(1.02);
+}
+
+.no-resultados {
+  text-align: center;
+  color: #d32f2f;
+  background-color: #ffebee;
+  padding: 0.8rem;
+  border-radius: 8px;
+  font-weight: 600;
+  margin-top: -1rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  animation: fadeIn 0.4s ease-out;
+}
+
+/* 🛍 PRODUCTOS */
 .productos, .carrito, .ticket {
   background: white;
   border-radius: 8px;
@@ -445,8 +425,16 @@ finalizarVenta() {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.8rem 0;
-  border-bottom: 1px solid #eee;
+  padding: 0.8rem 1rem;
+  margin-bottom: 1rem;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.producto-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
 }
 
 .info-producto {
@@ -467,12 +455,12 @@ finalizarVenta() {
   font-weight: 600;
   color: #4caf50;
 }
-
 .stock, .codigo {
   font-size: 0.85rem;
   color: #666;
 }
 
+/* ➕ BOTÓN AGREGAR */
 .btn-agregar {
   background-color: #4caf50;
   color: white;
@@ -490,6 +478,7 @@ finalizarVenta() {
   background-color: #388e3c;
 }
 
+/* 🛒 CARRITO */
 .carrito ul {
   list-style: none;
   padding-left: 0;
@@ -521,12 +510,10 @@ finalizarVenta() {
   cursor: pointer;
   transition: background-color 0.3s ease;
 }
-
 .contador-cantidad button:disabled {
   background-color: #9e9e9e;
   cursor: not-allowed;
 }
-
 .contador-cantidad button:hover:not(:disabled) {
   background-color: #388e3c;
 }
@@ -557,18 +544,19 @@ finalizarVenta() {
   color: #2e7d32;
 }
 
+/* 💳 MÉTODO DE PAGO */
 .metodo-pago {
   margin-top: 1rem;
   display: flex;
   gap: 1.5rem;
   align-items: center;
 }
-
 .metodo-pago label {
   cursor: pointer;
   user-select: none;
 }
 
+/* ✅ BOTÓN FINALIZAR */
 .btn-finalizar {
   margin-top: 1.5rem;
   width: 100%;
@@ -589,10 +577,10 @@ finalizarVenta() {
   background-color: #1b5e20;
 }
 
+/* 🧾 TICKET */
 .ticket h2 {
   color: #2e7d32;
 }
-
 .btn-imprimir {
   margin-top: 1rem;
   background-color: #4caf50;
@@ -607,7 +595,93 @@ finalizarVenta() {
   background-color: #388e3c;
 }
 
-/* Estilos impresión */
+/* 📦 TOTAL ACUMULADO */
+.recuadro-total-acumulado {
+  margin-top: 1rem;
+  background-color: #f1f8e9;
+  border: 2px solid #aed581;
+  border-radius: 10px;
+  padding: 1rem;
+  color: #33691e;
+  font-size: 1.2rem;
+  text-align: center;
+  font-weight: bold;
+}
+
+/* ❗ ALERTAS */
+.alerta-error {
+  text-align: center;
+  color: #c62828;
+  background-color: #ffebee;
+  padding: 1rem;
+  border-radius: 8px;
+  font-weight: 600;
+  margin-bottom: 1.2rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  animation: fadeIn 0.4s ease-out;
+}
+
+/* 🧊 MODAL */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.modal-contenido {
+  background: #fff;
+  padding: 2rem;
+  border-radius: 10px;
+  text-align: center;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+  transform: scale(0.9);
+  animation: slideIn 0.25s ease-out;
+}
+
+.modal-botones {
+  display: flex;
+  justify-content: space-around;
+  margin-top: 1.5rem;
+}
+
+.btn-confirmar,
+.btn-cancelar {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 1rem;
+  transition: background-color 0.2s ease;
+}
+
+.btn-confirmar {
+  background-color: #4caf50;
+  color: white;
+}
+.btn-confirmar:hover {
+  background-color: #388e3c;
+}
+
+.btn-cancelar {
+  background-color: #e57373;
+  color: white;
+}
+.btn-cancelar:hover {
+  background-color: #c62828;
+}
+
+/* 🖨 IMPRESIÓN */
 @media print {
   body * {
     visibility: hidden;
@@ -621,5 +695,16 @@ finalizarVenta() {
     top: 0;
     width: 100%;
   }
+}
+
+/* 🌟 ANIMACIONES */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { transform: scale(0.85); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
 }
 </style>

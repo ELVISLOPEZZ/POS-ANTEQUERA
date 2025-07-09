@@ -20,24 +20,31 @@
     </div>
 
     <!-- Alerta de productos caducados -->
-<div v-if="alertaCaducidadActiva" class="alerta-visual" style="border-left-color: #e53e3e; background-color: #fff0f0; color: #9b2c2c;">
-  ⚠️ Alerta: Los siguientes productos están caducados o por caducar:
-  <ul>
-    <li v-for="p in productosCaducados" :key="p.id">
-      • {{ p.nombre }} (Caducidad: {{ p.fechaCaducidad }})
-    </li>
-  </ul>
-</div>
+    <div v-if="alertaCaducidadActiva" class="alerta-visual alerta-caducados">
+      ⚠️ Alerta: Los siguientes productos están caducados o por caducar:
+      <ul>
+        <li v-for="p in productosCaducados" :key="p.id">
+          • {{ p.nombre }} (Caducidad: {{ p.fechaCaducidad }})
+        </li>
+      </ul>
+    </div>
 
-
-    <div class="botones-superior">
+    <div class="botones-superior" style="gap: 1rem; flex-wrap: wrap; align-items: center;">
       <button class="btn-agregar" @click="agregarProducto">➕ Agregar Producto</button>
       <button class="btn-agregar" @click="abrirModalCategoria">📁 Añadir Categoría</button>
 
       <div class="filtro-dropdown">
-        <select v-model="categoriaSeleccionada" @change="filtrarPorCategoria">
+        <select v-model="categoriaSeleccionada" @change="aplicarFiltro">
           <option value="">Todas las categorías</option>
           <option v-for="cat in categoriasUnicas" :key="cat">{{ cat }}</option>
+        </select>
+      </div>
+
+      <div class="filtro-dropdown">
+        <select v-model="filtroStock" @change="aplicarFiltro">
+          <option value="todos">Stock</option>
+         <option value="conStock">Con stock</option>
+          <option value="agotados">Sin Stock</option>
         </select>
       </div>
 
@@ -47,6 +54,7 @@
         v-model="terminoBusqueda"
         placeholder="🔍 Buscar producto..."
         @input="aplicarFiltro"
+        style="min-width: 250px;"
       />
     </div>
 
@@ -54,13 +62,18 @@
       <div
         v-for="producto in productosFiltrados"
         :key="producto.id"
-        class="card"
+        :class="['card', { 'agotado': producto.stock === 0 }]"
       >
         <img :src="producto.imagen" alt="producto" />
         <h3>{{ producto.nombre }}</h3>
         <p>Categoría: {{ producto.categoria }}</p>
         <p>Precio: ${{ producto.precio }}</p>
-        <p>Stock: {{ producto.stock }}</p>
+
+        <!-- Mostrar stock en rojo si está agotado -->
+        <p :class="{ 'stock-agotado': producto.stock === 0 }">
+          Stock: {{ producto.stock }}
+          <span v-if="producto.stock === 0" class="etiqueta-agotado">AGOTADO</span>
+        </p>
 
         <div class="acciones">
           <button @click="editarProducto(producto.id)">✏️ Editar</button>
@@ -70,20 +83,18 @@
     </div>
 
     <!-- Modal Producto -->
-<transition name="fade">
-  <div v-if="modalEliminarActivo" class="modal-eliminar-backdrop">
-    <div class="modal-eliminar">
-      <h3>Eliminar Producto ⚠️</h3>
-      <p>¿Seguro que deseas eliminar <strong>"{{ productoAEliminar?.nombre }}"</strong>?</p>
-      <div class="modal-eliminar-botones">
-        <button class="btn-cancelar" @click="cancelarEliminar">Cancelar</button>
-        <button class="btn-eliminar-confirmar" @click="confirmarEliminar">🗑️ Eliminar</button>
+    <transition name="fade">
+      <div v-if="modalEliminarActivo" class="modal-eliminar-backdrop">
+        <div class="modal-eliminar">
+          <h3>Eliminar Producto ⚠️</h3>
+          <p>¿Seguro que deseas eliminar <strong>"{{ productoAEliminar?.nombre }}"</strong>?</p>
+          <div class="modal-eliminar-botones">
+            <button class="btn-cancelar" @click="cancelarEliminar">Cancelar</button>
+            <button class="btn-eliminar-confirmar" @click="confirmarEliminar">🗑️ Eliminar</button>
+          </div>
+        </div>
       </div>
-    </div>
-  </div>
-</transition>
-
-
+    </transition>
 
     <div v-if="modalActivo" class="modal">
       <div class="modal-contenido">
@@ -186,14 +197,14 @@ export default {
       formCategoria: { nombre: '' },
       terminoBusqueda: '',
       categoriaSeleccionada: '',
+      filtroStock: 'todos',   // filtro stock: todos, agotados, conStock
       productosFiltrados: [],
-      fechaCaducidad: '',
       alertaActiva: false,
-      productosBajoStock: [],  
+      productosBajoStock: [],
       categorias: JSON.parse(localStorage.getItem('categorias')) || ['Ropa', 'Electrónica'],
-      mensajeEmergente: '',          // Para mostrar alertas temporales (producto creado/eliminado)
-      modalEliminarActivo: false,    // Controla si el modal para eliminar está visible
-      productoAEliminar: null,       // Guarda el producto que queremos eliminar
+      mensajeEmergente: '',
+      modalEliminarActivo: false,
+      productoAEliminar: null,
       productosCaducados: [],
       alertaCaducidadActiva: false,
     }
@@ -212,7 +223,7 @@ export default {
       localStorage.setItem('store_code', storeCode)
     }
     this.sucursal = storeCode
-    this.productos = obtenerProductosPorSucursal(this.sucursal)
+    this.refrescarProductos()
     this.aplicarFiltro()
     this.verificarBajoInventario()
   },
@@ -221,10 +232,9 @@ export default {
       const umbral = 5
       this.productosBajoStock = this.productos.filter(p => p.stock <= umbral)
       this.alertaActiva = this.productosBajoStock.length > 0
-    // NUEVO: verificar productos caducados
-    const hoy = new Date().toISOString().slice(0, 10) // 'YYYY-MM-DD'
-    this.productosCaducados = this.productos.filter(p => p.fechaCaducidad && p.fechaCaducidad <= hoy)
-    this.alertaCaducidadActiva = this.productosCaducados.length > 0
+      const hoy = new Date().toISOString().slice(0, 10)
+      this.productosCaducados = this.productos.filter(p => p.fechaCaducidad && p.fechaCaducidad <= hoy)
+      this.alertaCaducidadActiva = this.productosCaducados.length > 0
     },
     agregarProducto() {
       this.productoSeleccionado = null
@@ -254,54 +264,48 @@ export default {
       this.formulario = { ...producto }
       this.modalActivo = true
     },
-guardarCambios() {
-  const codigo = this.formulario.codigoBarras?.toString() || ''
-  if (!/^\d{1,13}$/.test(codigo)) {
-    alert('El código de barras debe tener solo números y máximo 13 dígitos.')
-    return
-  }
-
-  let todosLosProductos = JSON.parse(localStorage.getItem('productos')) || []
-  const esNuevo = this.productoSeleccionado === null
-
-  if (esNuevo) {
-    const nuevoProducto = {
-      id: this.siguienteId++,
-      ...this.formulario,
-      sucursal: this.sucursal
-    }
-    todosLosProductos.push(nuevoProducto)
-  } else {
-    const index = todosLosProductos.findIndex(p => p.id === this.productoSeleccionado)
-    if (index !== -1) {
-      todosLosProductos[index] = {
-        id: this.productoSeleccionado,
-        ...this.formulario,
-        sucursal: this.sucursal
+    guardarCambios() {
+      const codigo = this.formulario.codigoBarras?.toString() || ''
+      if (!/^\d{1,13}$/.test(codigo)) {
+        alert('El código de barras debe tener solo números y máximo 13 dígitos.')
+        return
       }
-    }
-  }
-
-  localStorage.setItem('siguienteId', this.siguienteId)
-  localStorage.setItem('productos', JSON.stringify(todosLosProductos))
-  this.modalActivo = false
-  this.refrescarProductos()
-
-  // ✅ MENSAJES EMERGENTES
-  this.mensajeEmergente = esNuevo
-    ? 'Producto creado exitosamente ✅'
-    : 'Producto editado correctamente ✏️✅'
-  setTimeout(() => {
-    this.mensajeEmergente = ''
-  }, 3000)
-},
-
-eliminarProducto(id) {
-  const producto = this.productos.find(p => p.id === id);
-  if (producto) {
-    this.abrirModalEliminar(producto);
-  }
-},
+      let todosLosProductos = JSON.parse(localStorage.getItem('productos')) || []
+      const esNuevo = this.productoSeleccionado === null
+      if (esNuevo) {
+        const nuevoProducto = {
+          id: this.siguienteId++,
+          ...this.formulario,
+          sucursal: this.sucursal
+        }
+        todosLosProductos.push(nuevoProducto)
+      } else {
+        const index = todosLosProductos.findIndex(p => p.id === this.productoSeleccionado)
+        if (index !== -1) {
+          todosLosProductos[index] = {
+            id: this.productoSeleccionado,
+            ...this.formulario,
+            sucursal: this.sucursal
+          }
+        }
+      }
+      localStorage.setItem('siguienteId', this.siguienteId)
+      localStorage.setItem('productos', JSON.stringify(todosLosProductos))
+      this.modalActivo = false
+      this.refrescarProductos()
+      this.mensajeEmergente = esNuevo
+        ? 'Producto creado exitosamente ✅'
+        : 'Producto editado correctamente ✏️✅'
+      setTimeout(() => {
+        this.mensajeEmergente = ''
+      }, 3000)
+    },
+    eliminarProducto(id) {
+      const producto = this.productos.find(p => p.id === id)
+      if (producto) {
+        this.abrirModalEliminar(producto)
+      }
+    },
     cancelarEdicion() {
       this.modalActivo = false
     },
@@ -318,35 +322,36 @@ eliminarProducto(id) {
         const coincideCategoria = this.categoriaSeleccionada
           ? p.categoria === this.categoriaSeleccionada
           : true
-        return coincideNombre && coincideCategoria
+        let cumpleFiltroStock = true
+        if (this.filtroStock === 'agotados') {
+          cumpleFiltroStock = p.stock === 0
+        } else if (this.filtroStock === 'conStock') {
+          cumpleFiltroStock = p.stock > 0
+        }
+        return coincideNombre && coincideCategoria && cumpleFiltroStock
       })
     },
-    filtrarPorCategoria() {
-      this.aplicarFiltro()
+    abrirModalEliminar(producto) {
+      this.productoAEliminar = producto
+      this.modalEliminarActivo = true
     },
-      abrirModalEliminar(producto) {
-    this.productoAEliminar = producto
-    this.modalEliminarActivo = true
-  },
-
-  cancelarEliminar() {
-    this.modalEliminarActivo = false
-    this.productoAEliminar = null
-  },
-
-  confirmarEliminar() {
-    if (!this.productoAEliminar) return;
-    let todosLosProductos = JSON.parse(localStorage.getItem('productos')) || []
-    todosLosProductos = todosLosProductos.filter(p => p.id !== this.productoAEliminar.id)
-    localStorage.setItem('productos', JSON.stringify(todosLosProductos))
-    this.refrescarProductos()
-    this.modalEliminarActivo = false
-    this.productoAEliminar = null
-    this.mensajeEmergente = 'Producto eliminado correctamente ❌'
-    setTimeout(() => {
-      this.mensajeEmergente = ''
-    }, 3000)
-  },
+    cancelarEliminar() {
+      this.modalEliminarActivo = false
+      this.productoAEliminar = null
+    },
+    confirmarEliminar() {
+      if (!this.productoAEliminar) return
+      let todosLosProductos = JSON.parse(localStorage.getItem('productos')) || []
+      todosLosProductos = todosLosProductos.filter(p => p.id !== this.productoAEliminar.id)
+      localStorage.setItem('productos', JSON.stringify(todosLosProductos))
+      this.refrescarProductos()
+      this.modalEliminarActivo = false
+      this.productoAEliminar = null
+      this.mensajeEmergente = 'Producto eliminado correctamente ❌'
+      setTimeout(() => {
+        this.mensajeEmergente = ''
+      }, 3000)
+    }
   }
 }
 </script>
@@ -763,6 +768,176 @@ h1 {
   border-left-color: #e53e3e !important;
   background-color: #fff0f0 !important;
   color: #9b2c2c !important;
+}
+
+/* === Responsive con 2 columnas para cards === */
+.lista-productos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.2rem;
+}
+
+
+@media (max-width: 768px) {
+  .lista-productos {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .lista-productos {
+    grid-template-columns: 1fr;
+  }
+
+  /* Estirar alertas al 100% ancho */
+  .alerta,
+  .alerta-visual {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Botones del modal eliminar emparejados con mismo ancho */
+  .modal-eliminar-botones {
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .modal-eliminar-botones button {
+    width: 100%;
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
+
+/* Asegúrate que las cards respondan bien al tamaño */
+.card {
+  background-color: white;
+  padding: 1rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: transform 0.2s ease;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+}
+
+.card img {
+  width: 100%;
+  height: 130px;
+  object-fit: contain;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.card h3 {
+  margin-bottom: 0.4rem;
+  font-size: clamp(1rem, 2vw, 1.2rem);
+}
+
+.card p {
+  margin: 0.2rem 0;
+  color: #4a5568;
+  font-size: clamp(0.9rem, 1.8vw, 1rem);
+}
+
+.acciones {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.6rem;
+}
+
+.acciones button {
+  padding: 0.5rem 0.9rem;
+  font-size: 0.9rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+.card {
+  background-color: white;
+  padding: 1rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  width: 100%; /* <-- Importante para que respete el grid */
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: transform 0.2s ease;
+}
+/* Estilo para productos agotados */
+.card.agotado {
+  background-color: #ffe5e5; /* Fondo rojo muy claro */
+  border: 1.5px solid #e53e3e; /* Borde rojo */
+  box-shadow: 0 0 8px rgba(229, 62, 62, 0.3);
+}
+
+.card.agotado h3,
+.card.agotado p {
+  color: #9b2c2c; /* Texto rojo oscuro */
+  font-weight: 700;
+}
+
+/* Etiqueta pequeña "AGOTADO" junto al stock */
+.etiqueta-agotado {
+  background-color: #e53e3e;
+  color: white;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 8px;
+  margin-left: 0.5rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+/* Stock en rojo cuando está agotado */
+.stock-agotado {
+  color: #c53030;
+  font-weight: 700;
+}
+
+
+
+
+/* Botón / checkbox personalizado para filtro de stock */
+.filtro-stock {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  font-weight: 600;
+  color: #2c3e50;
+  user-select: none;
+  padding: 0.4rem 0.8rem;
+  border: 2px solid #38a169;
+  border-radius: 8px;
+  background-color: white;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.filtro-stock input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.filtro-stock:hover {
+  background-color: #38a169;
+  color: white;
+}
+
+.filtro-stock.activo {
+  background-color: #38a169;
+  color: white;
+  border-color: #2f855a;
 }
 
 </style>

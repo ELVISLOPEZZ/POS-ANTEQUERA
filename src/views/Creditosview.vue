@@ -213,8 +213,8 @@ if (existente) {
         fecha: new Date().toISOString()
       });
 
-      if (this.clientes[index].creditoPendiente <= 0) {
-this.historialFinalizados.push({
+  if (this.clientes[index].creditoPendiente <= 0) {
+  this.historialFinalizados.push({
   nombre: this.clientes[index].nombre,
   monto: this.clientes[index].montoInicial,  // monto original, no 0
   descripcion: this.clientes[index].descripcion,
@@ -228,7 +228,6 @@ this.historialFinalizados.push({
       } else {
         this.mostrarToast("Pago registrado.", "exito");
       }
-
       this.guardarClientes();
     },
     solicitarEliminarDeuda(cliente) {
@@ -312,8 +311,6 @@ this.historialFinalizados.push({
   }
 };
 </script>
-
-
 
 
 
@@ -711,22 +708,48 @@ details ul li {
   border-bottom: none;
 }
 
+/* Responsive extra para móviles */
+@media (max-width: 480px) {
+  .creditos-view {
+    padding: 1rem;
+  }
 
-/* Responsive */
-@media (max-width: 600px) {
-  .filtros {
+  .formulario-credito,
+  .card-cliente,
+  .historial-finalizados {
+    padding: 1rem;
+  }
+
+  .tabla-historial {
+    display: block;
+    overflow-x: auto;
+  }
+
+  .tabla-historial table {
+    width: 100%;
+    min-width: 500px;
+  }
+
+  h1 {
+    font-size: 1.8rem;
+  }
+
+  .modal-content {
+    padding: 1.2rem;
+  }
+
+  .modal-buttons {
     flex-direction: column;
   }
-  .filtros input,
-  .filtros button {
+
+  .modal-buttons button {
     width: 100%;
   }
-  .acciones {
-    flex-direction: column;
-  }
-  .acciones input[type="number"],
-  .acciones button {
-    width: 100%;
+
+  .toast {
+    font-size: 0.9rem;
+    padding: 10px 14px;
   }
 }
+
 </style>

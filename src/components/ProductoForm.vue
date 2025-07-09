@@ -1,3 +1,4 @@
+-------------------------------------------------------NO SE ESTA USANDO EN NINGUN LUGAR-------------------------------------------------------
 <template>
   <form @submit.prevent="submitForm">
     <div>
@@ -80,4 +81,3 @@ button[type="button"] {
   color: white;
 }
 </style>
-

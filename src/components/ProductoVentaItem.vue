@@ -1,3 +1,4 @@
+-----------------------------------------------------------------REPORTES-----------------------------------------------------------------
 <template>
   <div class="modal-overlay" @click.self="cerrarModal" :class="{ cerrar: animandoCierre }">
     <div class="modal-content">

@@ -1,5 +1,4 @@
 // src/productos.js
-
 export function obtenerProductosPorSucursal(sucursal) {
   let productos = JSON.parse(localStorage.getItem('productos')) || []
 
@@ -95,6 +94,7 @@ export function obtenerProductosPorSucursal(sucursal) {
         codigoBarras: '7500000000151',
         fechaCaducidad: '2024-01-10'
       },
+      
       // SUCURSAL2 - ya existe 1 producto, agrego 4 más
       {
         id: 6,
@@ -209,13 +209,25 @@ export function obtenerProductosPorSucursal(sucursal) {
         fechaCaducidad: '2028-05-30'
       }
     ]
-    localStorage.setItem('productos', JSON.stringify(productos))
+  localStorage.setItem('productos', JSON.stringify(productos))
     localStorage.setItem('siguienteId', '16')
   }
 
-  // Guardar la normalización
   localStorage.setItem('productos', JSON.stringify(productos))
 
-  // Retorna los productos filtrados por sucursal
   return productos.filter(p => p.sucursal === sucursal)
+}
+
+// ✅ NUEVA FUNCIÓN para actualizar productos por sucursal (usada tras una venta)
+export function actualizarProductosPorSucursal(sucursal, productosActualizados) {
+  let todos = JSON.parse(localStorage.getItem('productos')) || []
+
+  // Remueve los productos existentes de esa sucursal
+  todos = todos.filter(p => p.sucursal !== sucursal)
+
+  // Agrega los productos actualizados de esa sucursal
+  const nuevos = [...todos, ...productosActualizados]
+
+  // Guarda en localStorage
+  localStorage.setItem('productos', JSON.stringify(nuevos))
 }

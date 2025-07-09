@@ -1,49 +1,38 @@
 <template>
   <div id="app">
     <header class="app-header" v-if="logueado">
-      <h1 class="titulo-sistema">POS "OAXACA DE ANTEQUERA"</h1>
+      <div class="header-top">
+        <h1 class="titulo-sistema">POS "OAXACA DE ANTEQUERA"</h1>
+        <button class="menu-toggle" @click="menuAbierto = !menuAbierto">
+          <span :class="{ abierto: menuAbierto }">☰</span>
+        </button>
+      </div>
 
-      <nav class="nav-botones">
-        <button @click="irA('Caja')" :class="{ activo: vista === 'Caja' }">Caja</button>
-        <button @click="irA('Creditos')" :class="{ activo: vista === 'Creditos' }">Créditos</button>
-        <button v-if="rolUsuario === 'admin'" @click="irA('Inventario')" :class="{ activo: vista === 'Inventario' }">Inventario</button>
-        <button v-if="rolUsuario === 'admin'" @click="irA('Reportes')" :class="{ activo: vista === 'Reportes' }">Reportes</button>
-        <button v-if="rolUsuario === 'admin'" @click="irA('Administrador')" :class="{ activo: vista === 'Administrador' }">Administrador</button>
-        <button @click="cerrarSesion" class="btn-logout">Cerrar sesión</button>
-      </nav>
+      <!-- Menú toggle -->
+      <transition name="slide">
+        <nav v-show="menuAbierto || anchoPantalla >= 769" class="nav-botones">
+          <button @click="irA('Caja')" :class="{ activo: vista === 'Caja' }">Caja</button>
+          <button @click="irA('Creditos')" :class="{ activo: vista === 'Creditos' }">Créditos</button>
+          <button v-if="rolUsuario === 'admin'" @click="irA('Inventario')" :class="{ activo: vista === 'Inventario' }">Inventario</button>
+          <button v-if="rolUsuario === 'admin'" @click="irA('Reportes')" :class="{ activo: vista === 'Reportes' }">Reportes</button>
+          <button v-if="rolUsuario === 'admin'" @click="irA('Administrador')" :class="{ activo: vista === 'Administrador' }">Administrador</button>
+          <button @click="cerrarSesion" class="btn-logout">Cerrar sesión</button>
+        </nav>
+      </transition>
     </header>
 
     <main class="contenido">
       <router-view v-if="!logueado" @login-exitoso="onLoginExitoso" />
-      
       <div v-else>
-        <CajaView
-          v-if="vista === 'Caja'"
-          ref="cajaViewComponent"
-          :sucursal="sucursalActual"
-          @nueva-venta="agregarVenta"
-        />
-        <Creditosview
-          v-if="vista === 'Creditos'"
-          ref="creditosviewComponent"
-          :sucursal="sucursalActual"
-        />
-        <InventarioView
-          v-if="vista === 'Inventario'"
-          :sucursal="sucursalActual"
-        />
-        <ReportesView
-          v-if="vista === 'Reportes'"
-          :ventas="ventas"
-          :sucursal="sucursalActual"
-        />
-        <AdministradorView
-          v-if="vista === 'Administrador'"
-        />
+        <CajaView v-if="vista === 'Caja'" ref="cajaViewComponent" :sucursal="sucursalActual" @nueva-venta="agregarVenta" />
+        <Creditosview v-if="vista === 'Creditos'" ref="creditosviewComponent" :sucursal="sucursalActual" />
+        <InventarioView v-if="vista === 'Inventario'" :sucursal="sucursalActual" />
+        <ReportesView v-if="vista === 'Reportes'" :ventas="ventas" :sucursal="sucursalActual" />
+        <AdministradorView v-if="vista === 'Administrador'" />
       </div>
     </main>
 
-    <!-- Modal de Confirmación de Cierre de Sesión -->
+    <!-- Modales -->
     <div v-if="mostrarAlerta" class="modal-overlay" @click.self="cancelarCerrarSesion">
       <div class="modal-contenido">
         <div class="modal-icono">⚠️</div>
@@ -56,7 +45,6 @@
       </div>
     </div>
 
-    <!-- Modal de Confirmación de Corte del Día -->
     <div v-if="mostrarCorteConfirmado" class="modal-overlay" @click.self="finalizarCorte">
       <div class="modal-contenido">
         <div class="modal-icono">✅</div>
@@ -95,12 +83,15 @@ export default {
       mostrarAlerta: false,
       mostrarCorteConfirmado: false,
       sucursalActual: '',
-      rolUsuario: ''
+      rolUsuario: '',
+      menuAbierto: false,
+      anchoPantalla: window.innerWidth
     }
   },
   methods: {
     irA(vista) {
       this.vista = vista
+      if (this.anchoPantalla < 769) this.menuAbierto = false
     },
     agregarVenta(nuevaVenta) {
       this.ventas.push(nuevaVenta)
@@ -110,16 +101,14 @@ export default {
       this.mostrarAlerta = true
     },
     confirmarCerrarSesion() {
-      if (this.$refs.cajaViewComponent?.cerrarCaja) {
-        this.$refs.cajaViewComponent.cerrarCaja()
-      }
+      this.$refs.cajaViewComponent?.cerrarCaja?.()
       this.mostrarAlerta = false
       this.mostrarCorteConfirmado = true
     },
     finalizarCorte() {
       logout()
-      this.mostrarCorteConfirmado = false
       this.logueado = false
+      this.mostrarCorteConfirmado = false
       this.sucursalActual = ''
       this.rolUsuario = ''
       localStorage.removeItem('store_code')
@@ -135,21 +124,24 @@ export default {
       this.rolUsuario = usuario.rol || ''
       this.vista = 'Caja'
       this.$router.push('/caja')
+    },
+    actualizarAnchoPantalla() {
+      this.anchoPantalla = window.innerWidth
+      if (this.anchoPantalla >= 769) this.menuAbierto = false
     }
   },
   created() {
     this.logueado = isLoggedIn()
-    if (!this.logueado) {
-      this.$router.push('/')
-    } else {
+    if (!this.logueado) this.$router.push('/')
+    else {
       this.sucursalActual = localStorage.getItem('store_code') || ''
       this.rolUsuario = localStorage.getItem('rol_usuario') || ''
     }
+
+    window.addEventListener('resize', this.actualizarAnchoPantalla)
   },
-  watch: {
-    '$route'() {
-      this.logueado = isLoggedIn()
-    }
+  unmounted() {
+    window.removeEventListener('resize', this.actualizarAnchoPantalla)
   }
 }
 </script>
@@ -164,55 +156,67 @@ export default {
 
 body, html, #app {
   font-family: 'Poppins', sans-serif;
-  background-color: #fafafa; /* fondo neutro claro */
+  background-color: #f3f8f5;
   min-height: 100vh;
 }
 
-/* HEADER elegante café */
+/* HEADER */
 .app-header {
   background: linear-gradient(135deg, #d7ccc8, #efebe9);
-  padding: 1.2rem 2rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  padding: 1rem 1.5rem;
   border-bottom: 3px solid #bcaaa4;
   box-shadow: 0 6px 10px rgba(0, 0, 0, 0.08);
-  border-radius: 0 0 18px 18px;
+  border-radius: 0 0 16px 16px;
+}
+
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .titulo-sistema {
-  font-size: 2.5rem;
+  font-size: 1.9rem;
   color: #4e342e;
-  font-weight: 700;
-  margin-bottom: 1rem;
-  text-shadow: 1px 1px 1px rgba(0,0,0,0.05);
+  font-weight: bold;
 }
 
-/* NAV BAR con íconos */
+/* MENU TOGGLE */
+.menu-toggle {
+  background: none;
+  border: none;
+  font-size: 2rem;
+  color: #4e342e;
+  cursor: pointer;
+  display: none;
+}
+.menu-toggle span.abierto {
+  transform: rotate(90deg);
+}
+
+/* NAV BOTONES */
 .nav-botones {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 0.7rem;
+  gap: 0.6rem;
+  margin-top: 1rem;
 }
 
 .nav-botones button {
-  padding: 0.65rem 1.4rem;
+  padding: 0.6rem 1.2rem;
   border-radius: 14px;
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  transition: all 0.3s ease;
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.05);
+  gap: 0.4rem;
   border: 2px solid transparent;
   background-color: #fff6ec;
   color: #4e342e;
+  transition: all 0.3s ease;
 }
-
-/* Emojis decorativos */
 .nav-botones button:nth-child(1)::before { content: "💵"; }
 .nav-botones button:nth-child(2)::before { content: "🧾"; }
 .nav-botones button:nth-child(3)::before { content: "📦"; }
@@ -220,13 +224,10 @@ body, html, #app {
 .nav-botones button:nth-child(5)::before { content: "👤"; }
 
 .nav-botones button:hover {
-  background-color: #ffe0b2; /* durazno claro */
-  transform: translateY(-2px);
-  box-shadow: 0 5px 10px rgba(0,0,0,0.1);
+  background-color: #ffe0b2;
 }
-
 .nav-botones button.activo {
-  background-color: #a5d6a7; /* verde menta */
+  background-color: #a5d6a7;
   color: #1b5e20;
   border-color: #81c784;
 }
@@ -234,33 +235,44 @@ body, html, #app {
 /* BOTÓN CERRAR SESIÓN */
 .btn-logout {
   background-color: #ef9a9a;
-  color: #ffffff;
-  padding: 0.6rem 1.2rem;
-  border: none;
-  border-radius: 14px;
-  font-weight: bold;
-  margin-left: 1rem;
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  color: #fff;
 }
 .btn-logout::before {
   content: "🔓";
 }
 .btn-logout:hover {
   background-color: #c62828;
-  transform: scale(1.05);
 }
 
-/* CONTENIDO PRINCIPAL */
+/* RESPONSIVE */
+@media (max-width: 768px) {
+  .menu-toggle {
+    display: block;
+  }
+  .nav-botones {
+    flex-direction: column;
+    align-items: center;
+    gap: 0.8rem;
+  }
+}
+
+/* TRANSICIÓN SLIDE */
+.slide-enter-active, .slide-leave-active {
+  transition: all 0.3s ease;
+}
+.slide-enter-from, .slide-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+/* CONTENIDO */
 .contenido {
   padding: 2rem;
   max-width: 1200px;
   margin: auto;
 }
 
-/* MODALES */
+/* MODALES (igual que antes) */
 .modal-overlay {
   position: fixed;
   top: 0; left: 0;
@@ -287,49 +299,65 @@ body, html, #app {
   font-size: 3rem;
   margin-bottom: 1rem;
 }
-
 .modal-titulo {
   font-size: 1.6rem;
   font-weight: bold;
   color: #bf360c;
   margin-bottom: 0.6rem;
 }
-
 .modal-texto {
   color: #5d4037;
   font-size: 1rem;
   margin-bottom: 1.5rem;
 }
-
 .modal-botones {
   display: flex;
   justify-content: center;
   gap: 1rem;
 }
-
-/* Botones del modal */
 .btn-confirmar, .btn-cancelar {
   padding: 0.6rem 1.4rem;
   border-radius: 10px;
   border: none;
   font-weight: bold;
   cursor: pointer;
-  transition: all 0.3s ease;
 }
-
 .btn-confirmar {
   background-color: #4caf50;
   color: white;
 }
-.btn-confirmar:hover {
-  background-color: #388e3c;
-}
-
 .btn-cancelar {
   background-color: #90a4ae;
   color: white;
 }
-.btn-cancelar:hover {
-  background-color: #607d8b;
+@media (max-width: 768px) {
+  .menu-toggle {
+    display: block;
+  }
+
+  .menu-lateral {
+    position: fixed;
+    top: 80px;
+    right: 0;
+    width: 240px;
+    background: #fff6ec;
+    box-shadow: -4px 0 12px rgba(0,0,0,0.1);
+    border-left: 2px solid #bcaaa4;
+    padding: 1rem;
+    z-index: 1001;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.8rem;
+    border-radius: 12px 0 0 12px;
+  }
+}
+
+/* Animación slide desde la derecha */
+.slide-right-enter-active, .slide-right-leave-active {
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+.slide-right-enter-from, .slide-right-leave-to {
+  transform: translateX(100%);
+  opacity: 0;
 }
 </style>

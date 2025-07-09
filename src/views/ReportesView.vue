@@ -28,38 +28,34 @@
       </select>
     </div>
 
-    <!-- KPIs -->
-    <div class="resumen">
-      <p>Total de Ventas: <strong>{{ ventasFiltradas.length }}</strong></p>
-      <p>Ingresos Totales: <strong>${{ ingresosTotales.toFixed(2) }}</strong></p>
-      <p>Promedio por Venta: <strong>${{ promedioVenta.toFixed(2) }}</strong></p>
-    </div>
+<!-- Tabla con contenedor para scroll horizontal -->
+<div class="table-container">
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Fecha</th>
+        <th>Cajero</th>
+        <th>Sucursal</th>
+        <th>Total</th>
+        <th>Método de pago</th>
+        <th>Detalles</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr v-for="venta in ventasFiltradas" :key="venta.id">
+        <td>{{ venta.id }}</td>
+        <td>{{ new Date(venta.fecha).toLocaleString() }}</td>
+        <td>{{ venta.usuario?.nombre || 'N/A' }}</td>
+        <td>{{ venta.usuario?.sucursal || 'N/A' }}</td>
+        <td>${{ venta.total.toFixed(2) }}</td>
+        <td>{{ venta.metodoPago }}</td>
+        <td><button class="ver-detalle" @click="verDetalle(venta)">🔍 Ver</button></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
 
-    <!-- Tabla -->
-    <table>
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Fecha</th>
-          <th>Cajero</th>
-          <th>Sucursal</th>
-          <th>Total</th>
-          <th>Método de pago</th>
-          <th>Detalles</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="venta in ventasFiltradas" :key="venta.id">
-          <td>{{ venta.id }}</td>
-          <td>{{ new Date(venta.fecha).toLocaleString() }}</td>
-          <td>{{ venta.usuario?.nombre || 'N/A' }}</td>
-          <td>{{ venta.usuario?.sucursal || 'N/A' }}</td>
-          <td>${{ venta.total.toFixed(2) }}</td>
-          <td>{{ venta.metodoPago }}</td>
-          <td><button class="ver-detalle" @click="verDetalle(venta)">🔍 Ver</button></td>
-        </tr>
-      </tbody>
-    </table>
 
     <!-- Botones exportar -->
     <div class="export-buttons">
@@ -158,94 +154,185 @@ export default {
 
 
 
-
-
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+
 .reporte-ventas {
-  max-width: 1100px;
-  margin: auto;
+  max-width: 1000px;
+  margin: 2rem auto;
   padding: 2rem;
-  background: #fff;
   font-family: 'Poppins', sans-serif;
+  background: #f9f9f9;
+  border-radius: 10px;
+  box-shadow: 0 0 15px rgba(0,0,0,0.08);
 }
+
+.reporte-ventas h1 {
+  text-align: center;
+  font-weight: 700;
+  font-size: 2.2rem;
+  color: #2c3e50;
+  margin-bottom: 1.5rem;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* Filtros */
 .filtros {
   display: flex;
-  gap: 1rem;
-  align-items: center;
   flex-wrap: wrap;
-  margin-bottom: 1rem;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  align-items: center;
+  justify-content: space-between;
 }
+
 .filtros label {
   font-weight: 600;
-  color: #333;
+  color: #2e7d32;
+  min-width: 90px;
 }
+
 .filtros input,
 .filtros select {
-  padding: 0.5rem;
+  padding: 0.6rem;
+  border: 2px solid #c8e6c9;
   border-radius: 6px;
-  border: 1px solid #ccc;
-  font-family: 'Poppins', sans-serif;
+  outline: none;
+  font-size: 0.95rem;
+  flex: 1 1 180px;
+  min-width: 140px;
 }
+
+.filtros input:focus,
+.filtros select:focus {
+  border-color: #4caf50;
+}
+
+/* KPIs */
 .resumen {
-  margin-bottom: 1rem;
-  background: #f1f8f2;
-  padding: 1rem;
+  background: #e8f5e9;
+  border-left: 5px solid #4caf50;
+  padding: 1rem 1.5rem;
   border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-}
-.resumen p {
+  margin-bottom: 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
   font-weight: 600;
-  margin: 0.5rem 0;
+  color: #2c3e50;
 }
+
+.resumen p {
+  margin: 0.5rem 0;
+  flex: 1 1 200px;
+}
+
+/* Tabla: Agregamos contenedor scroll para móvil */
+.table-container {
+  overflow-x: auto;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.1);
+  border-radius: 10px;
+  background: white;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 1rem;
-  background-color: #fefefe;
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.1);
 }
+
 th, td {
   padding: 1rem;
   text-align: center;
   border-bottom: 1px solid #eee;
-  font-size: 0.95rem;
+  white-space: nowrap;
 }
+
 th {
-  background-color: #2e7d32;
+  background: #2e7d32;
   color: white;
-  text-transform: uppercase;
+  font-weight: 600;
 }
+
+td {
+  font-size: 0.95rem;
+  color: #555;
+}
+
 .ver-detalle {
-  background-color: #388e3c;
+  background: #4caf50;
   color: white;
+  padding: 0.4rem 0.9rem;
   border: none;
-  padding: 0.4rem 0.8rem;
   border-radius: 6px;
   cursor: pointer;
-  font-weight: bold;
+  font-weight: 600;
   transition: background-color 0.3s ease;
 }
+
 .ver-detalle:hover {
-  background-color: #256429;
+  background: #388e3c;
 }
+
+/* Botones Exportar */
 .export-buttons {
-  margin-top: 2rem;
-  text-align: right;
+  text-align: center;
+  margin-top: 1rem;
 }
+
 .export-buttons button {
-  margin-left: 1rem;
-  padding: 0.6rem 1.2rem;
-  background-color: #4caf50;
+  background: #2e7d32;
   color: white;
-  font-weight: bold;
   border: none;
+  padding: 0.6rem 1.2rem;
+  margin: 0 0.5rem;
+  font-weight: 600;
   border-radius: 6px;
   cursor: pointer;
   transition: background-color 0.3s ease;
 }
+
 .export-buttons button:hover {
-  background-color: #2e7d32;
+  background: #1b5e20;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .filtros {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filtros label {
+    margin-bottom: 0.2rem;
+  }
+
+  .resumen {
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+
+  table, .resumen p {
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .reporte-ventas {
+    padding: 1rem;
+  }
+
+  .filtros input,
+  .filtros select {
+    flex: 1 1 100%;
+    min-width: auto;
+  }
+
+  .export-buttons button {
+    margin: 0.3rem 0;
+    width: 100%;
+  }
 }
 </style>
