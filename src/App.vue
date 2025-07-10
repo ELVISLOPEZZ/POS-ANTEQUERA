@@ -13,7 +13,7 @@
         <nav v-show="menuAbierto || anchoPantalla >= 769" class="nav-botones">
           <button @click="irA('Caja')" :class="{ activo: vista === 'Caja' }">Caja</button>
           <button @click="irA('Creditos')" :class="{ activo: vista === 'Creditos' }">Créditos</button>
-          <button v-if="rolUsuario === 'admin'" @click="irA('Inventario')" :class="{ activo: vista === 'Inventario' }">Inventario</button>
+          <button @click="irA('Inventario')" :class="{ activo: vista === 'Inventario' }">Inventario</button>
           <button v-if="rolUsuario === 'admin'" @click="irA('Reportes')" :class="{ activo: vista === 'Reportes' }">Reportes</button>
           <button v-if="rolUsuario === 'admin'" @click="irA('Administrador')" :class="{ activo: vista === 'Administrador' }">Administrador</button>
           <button @click="cerrarSesion" class="btn-logout">Cerrar sesión</button>

@@ -1,7 +1,11 @@
-<!-- CajaView.vue -->
 <template>
   <div class="caja-view">
     <h1 class="titulo">Caja de Cobro</h1>
+
+    <!-- ALERTA GENERAL -->
+    <div v-if="alerta.visible" :class="['alerta-general', alerta.tipo]">
+      {{ alerta.mensaje }}
+    </div>
 
     <!-- MODAL DE CONFIRMACIÓN -->
     <div v-if="modalVisible" class="modal-overlay">
@@ -24,8 +28,8 @@
         class="input-busqueda"
       />
       <div
-        v-for="producto in productosFiltrados"
-        :key="producto.id"
+        v-for="(producto, index) in productosFiltrados"
+        :key="producto.id + '-' + index"
         class="producto-card"
       >
         <div class="info-producto">
@@ -55,7 +59,6 @@
       </p>
     </section>
 
-    
     <!-- Código de barras -->
     <div class="lector-codigo">
       <input
@@ -73,7 +76,7 @@
       />
     </div>
 
-        <!-- Alerta si no se encuentra producto -->
+    <!-- Alerta si no se encuentra producto -->
     <div v-if="productoNoEncontrado" class="alerta-error">
       ❌ Producto no encontrado con ese código de barras.
     </div>
@@ -83,7 +86,7 @@
       <h2>Carrito</h2>
       <div v-if="carrito.length === 0" class="empty-carrito">No hay productos en el carrito.</div>
       <ul v-else class="lista-carrito">
-        <li v-for="item in carrito" :key="item.id" class="item-carrito">
+        <li v-for="(item, index) in carrito" :key="item.id + '-' + index" class="item-carrito">
           <span>{{ item.nombre }}</span>
           <div class="contador-cantidad">
             <button @click="cambiarCantidad(item, -1)">-</button>
@@ -102,13 +105,46 @@
         <label><input type="radio" value="efectivo" v-model="metodoPago" /> Efectivo</label>
         <label><input type="radio" value="tarjeta" v-model="metodoPago" /> Tarjeta</label>
         <label><input type="radio" value="transferencia" v-model="metodoPago" /> Transferencia</label>
+        <label><input type="radio" value="credito" v-model="metodoPago" /> Crédito</label>
+      </div>
+
+      <!-- FORMULARIO COMPLETO DE CRÉDITO -->
+      <div v-if="metodoPago === 'credito'" class="formulario-credito">
+        <h3>📋 Crear nuevo crédito</h3>
+        <div class="form-group">
+          <label for="nombreCredito">Nombre del cliente</label>
+          <input
+            id="nombreCredito"
+            v-model="nuevoCreditoCaja.nombre"
+            type="text"
+            placeholder="Nombre del cliente"
+          />
+        </div>
+        <div class="form-group">
+          <label>Monto del crédito</label>
+          <input :value="total.toFixed(2)" type="number" readonly />
+        </div>
+        <div class="form-group">
+          <label for="descripcionCredito">Descripción (motivo del crédito)</label>
+          <input
+            id="descripcionCredito"
+            v-model="nuevoCreditoCaja.descripcion"
+            type="text"
+            placeholder="Ejemplo: Préstamo por emergencia"
+          />
+        </div>
+        <button class="btn-crear" @click="guardarCredito">Otorgar crédito</button>
       </div>
 
       <div v-if="totalAcumulado > 0" class="recuadro-total-acumulado">
         <p><strong>Total acumulado del día:</strong> ${{ totalAcumulado.toFixed(2) }}</p>
       </div>
 
-      <button @click="finalizarVenta" :disabled="carrito.length === 0" class="btn-finalizar">
+      <button
+        @click="finalizarVenta"
+        :disabled="carrito.length === 0 || metodoPago === 'credito'"
+        class="btn-finalizar"
+      >
         Finalizar Venta
       </button>
     </section>
@@ -117,7 +153,7 @@
     <section v-if="ventaFinalizada" class="ticket" id="ticket">
       <h2>Ticket de Venta</h2>
       <ul>
-        <li v-for="item in carritoAnterior" :key="item.id">
+        <li v-for="(item, index) in carritoAnterior" :key="item.id + '-' + index">
           {{ item.nombre }} (x{{ item.cantidad }}) - ${{ (item.precio * item.cantidad).toFixed(2) }}
         </li>
       </ul>
@@ -130,9 +166,7 @@
 </template>
 
 <script>
-// Conserva tus imports
-import { obtenerProductosPorSucursal, actualizarProductosPorSucursal } from '../productos.js'
-
+import { obtenerProductosPorSucursal, actualizarProductosPorSucursal } from '../productos.js';
 
 
 export default {
@@ -153,7 +187,16 @@ export default {
       busquedaProducto: '',
       productoNoEncontrado: false,
       modalVisible: false,
-      itemAEliminar: null
+      itemAEliminar: null,
+      nuevoCreditoCaja: {
+      nombre: '',
+      descripcion: ''
+      },
+          alerta: {
+      visible: false,
+      mensaje: '',
+      tipo: 'exito'
+    }
     };
   },
   computed: {
@@ -228,20 +271,69 @@ export default {
       this.agregarAlCarrito(producto);
       this.codigoEscaneado = '';
     },
-finalizarVenta() {
+guardarCredito() {
+  if (!this.nuevoCreditoCaja.nombre.trim()) {
+    this.mostrarAlerta('⚠️ Ingresa el nombre del cliente.', 'error');
+    return;
+  }
+  if (!this.total || this.total <= 0) {
+    this.mostrarAlerta('⚠️ El carrito está vacío.', 'error');
+    return;
+  }
+
+  const nombre = this.nuevoCreditoCaja.nombre.trim();
+  const descripcion = this.nuevoCreditoCaja.descripcion.trim();
+  const monto = this.total;
+  const sucursal = this.sucursal;
+  const clientes = JSON.parse(localStorage.getItem('clientes')) || [];
+
+  const existente = clientes.find(
+    c => c.nombre.toLowerCase() === nombre.toLowerCase() && c.sucursal === sucursal
+  );
+
+  if (existente) {
+    existente.creditoPendiente += monto;
+    existente.montoInicial += monto;
+    existente.descripcion += descripcion ? `; ${descripcion}` : '';
+  } else {
+    clientes.push({
+      id: Date.now(),
+      nombre,
+      creditoPendiente: monto,
+      montoInicial: monto,
+      descripcion,
+      historial: [],
+      sucursal
+    });
+  }
+
+  localStorage.setItem('clientes', JSON.stringify(clientes));
+
+  this.nuevoCreditoCaja = { nombre: '', descripcion: '' };
+  this.carrito = [];
+  this.ventaFinalizada = false;
+  this.metodoPago = 'efectivo';
+  this.mostrarAlerta('✔️ Crédito guardado con éxito.', 'exito');
+},
+
+
+    finalizarVenta() {
+      if (this.metodoPago === 'credito') {
+        alert('Para ventas a crédito, usa el botón "Otorgar crédito".');
+        return;
+      }
+
       this.carrito.forEach(item => {
         const prod = this.productos.find(p => p.id === item.id);
         if (prod) prod.stock -= item.cantidad;
       });
 
+      actualizarProductosPorSucursal(this.sucursal, this.productos);
+
       const usuarioActual = JSON.parse(localStorage.getItem('usuario')) || {
         username: 'desconocido',
         sucursal: 'sin_sucursal'
       };
-      const sucursal = usuarioActual.sucursal || 'sin_sucursal';
-
-        // 🔄 Guardar productos actualizados en localStorage
-  actualizarProductosPorSucursal(sucursal, this.productos);
 
       const venta = {
         id: Date.now(),
@@ -251,9 +343,9 @@ finalizarVenta() {
         fecha: new Date().toISOString(),
         usuario: {
           nombre: usuarioActual.username,
-          sucursal: sucursal
+          sucursal: this.sucursal
         },
-        sucursal: sucursal
+        sucursal: this.sucursal
       };
 
       const todasVentas = JSON.parse(localStorage.getItem('ventas_realizadas')) || [];
@@ -261,10 +353,9 @@ finalizarVenta() {
       localStorage.setItem('ventas_realizadas', JSON.stringify(todasVentas));
 
       const hoy = new Date().toISOString().slice(0, 10);
-      const claveTotal = `total_acumulado_${sucursal}_${hoy}`;
+      const claveTotal = `total_acumulado_${this.sucursal}_${hoy}`;
       const totalAnterior = parseFloat(localStorage.getItem(claveTotal)) || 0;
       const nuevoTotal = totalAnterior + this.total;
-
       localStorage.setItem(claveTotal, nuevoTotal.toString());
       this.totalAcumulado = nuevoTotal;
 
@@ -330,7 +421,15 @@ finalizarVenta() {
       if (event.key === 'Escape') {
         this.reenfocarInput();
       }
-    }
+    },
+    mostrarAlerta(mensaje, tipo = 'exito') {
+  this.alerta.mensaje = mensaje;
+  this.alerta.tipo = tipo;
+  this.alerta.visible = true;
+  setTimeout(() => {
+    this.alerta.visible = false;
+  }, 3000);
+},
   }
 };
 </script>
@@ -707,4 +806,202 @@ finalizarVenta() {
   from { transform: scale(0.85); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
 }
+
+/* ============================
+   ESTILOS NUEVOS PARA LA TABLA
+=============================== */
+.tabla-container {
+  overflow-x: auto;
+  margin-bottom: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  background: #fff;
+  padding: 1rem;
+}
+
+.tabla-reportes {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 12px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 1rem;
+  color: #2e7d32;
+}
+
+.tabla-reportes thead tr {
+  background-color: transparent;
+}
+
+.tabla-reportes thead th {
+  padding: 12px 20px;
+  text-align: left;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.9rem;
+  color: #4caf50;
+  letter-spacing: 0.05em;
+  border-bottom: 2px solid #4caf50;
+  user-select: none;
+}
+
+.tabla-reportes tbody tr {
+  background: #e8f5e9;
+  box-shadow: 0 4px 6px rgba(76, 175, 80, 0.1);
+  border-radius: 12px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+  display: block;
+  margin-bottom: 12px;
+  padding: 12px 20px;
+}
+
+.tabla-reportes tbody tr:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(76, 175, 80, 0.25);
+}
+
+.tabla-reportes tbody tr td {
+  display: block;
+  padding: 6px 0;
+  font-weight: 600;
+  border: none;
+  color: #256029;
+}
+
+.tabla-reportes tbody tr td::before {
+  content: attr(data-label);
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-right: 10px;
+  color: #4caf50;
+  font-size: 0.75rem;
+}
+
+@media (min-width: 768px) {
+  .tabla-reportes {
+    border-spacing: 0;
+  }
+
+  .tabla-reportes tbody tr {
+    display: table-row;
+    background: white;
+    box-shadow: none;
+    border-radius: 0;
+    margin-bottom: 0;
+    padding: 0;
+    cursor: default;
+  }
+
+  .tabla-reportes tbody tr:hover {
+    transform: none;
+    box-shadow: none;
+  }
+
+  .tabla-reportes tbody tr td {
+    display: table-cell;
+    padding: 12px 20px;
+    color: #2e7d32;
+    font-weight: normal;
+    border-bottom: 1px solid #e0e0e0;
+  }
+
+  .tabla-reportes tbody tr td::before {
+    content: none;
+  }
+}
+/* FORMULARIO CRÉDITO */
+.formulario-credito {
+  background-color: #e8f5e9; /* verde muy suave */
+  border: 2px solid #81c784; /* verde medio */
+  border-radius: 10px;
+  padding: 1.5rem 2rem;
+  margin-top: 1.5rem;
+  box-shadow: 0 4px 12px rgba(129, 199, 132, 0.3);
+}
+
+.formulario-credito h3 {
+  color: #2e7d32;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  font-family: 'Poppins', sans-serif;
+  text-align: center;
+  letter-spacing: 0.6px;
+}
+
+.formulario-credito .form-group {
+  margin-bottom: 1.2rem;
+}
+
+.formulario-credito label {
+  display: block;
+  font-weight: 600;
+  color: #2e7d32;
+  margin-bottom: 0.4rem;
+  font-size: 0.95rem;
+  user-select: none;
+}
+
+.formulario-credito input[type="text"],
+.formulario-credito input[type="number"] {
+  width: 100%;
+  padding: 0.55rem 1rem;
+  font-size: 1rem;
+  border: 2px solid #4caf50;
+  border-radius: 8px;
+  outline: none;
+  transition: border-color 0.3s ease;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  box-sizing: border-box;
+}
+
+.formulario-credito input[type="text"]:focus,
+.formulario-credito input[type="number"]:focus {
+  border-color: #2e7d32;
+  box-shadow: 0 0 6px rgba(46, 125, 50, 0.5);
+}
+
+.btn-crear {
+  display: block;
+  width: 100%;
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  padding: 0.75rem 0;
+  font-weight: 700;
+  font-size: 1.1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  margin-top: 0.5rem;
+}
+
+.btn-crear:hover {
+  background-color: #388e3c;
+}
+
+.btn-crear:active {
+  background-color: #2e7d32;
+}
+
+.alerta-general {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  padding: 1rem 1.5rem;
+  border-radius: 6px;
+  font-weight: bold;
+  color: white;
+  box-shadow: 0 0 10px rgba(0,0,0,0.3);
+  z-index: 9999;
+  transition: opacity 0.3s ease;
+}
+
+.alerta-general.exito {
+  background-color: #4caf50; /* verde */
+}
+
+.alerta-general.error {
+  background-color: #f44336; /* rojo */
+}
+
 </style>
