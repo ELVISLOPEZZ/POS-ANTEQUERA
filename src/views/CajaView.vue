@@ -1,173 +1,173 @@
-<template>
-  <div class="caja-view">
-    <h1 class="titulo">Caja de Cobro</h1>
+  <template>
+    <div class="caja-view">
+      <h1 class="titulo">Caja de Cobro</h1>
 
-    <!-- ALERTA GENERAL -->
-    <div v-if="alerta.visible" :class="['alerta-general', alerta.tipo]">
-      {{ alerta.mensaje }}
-    </div>
-
-    <!-- MODAL DE CONFIRMACIÓN -->
-    <div v-if="modalVisible" class="modal-overlay">
-      <div class="modal-contenido">
-        <p>¿Eliminar "<strong>{{ itemAEliminar?.nombre }}</strong>" del carrito?</p>
-        <div class="modal-botones">
-          <button @click="confirmarEliminacion(true)" class="btn-confirmar">Sí</button>
-          <button @click="confirmarEliminacion(false)" class="btn-cancelar">Cancelar</button>
-        </div>
+      <!-- ALERTA GENERAL -->
+      <div v-if="alerta.visible" :class="['alerta-general', alerta.tipo]">
+        {{ alerta.mensaje }}
       </div>
-    </div>
 
-    <!-- Buscar producto -->
-    <section class="productos">
-      <h2>Buscar producto por nombre</h2>
-      <input
-        v-model="busquedaProducto"
-        type="text"
-        placeholder="Escribe el nombre del producto"
-        class="input-busqueda"
-      />
-      <div
-        v-for="(producto, index) in productosFiltrados"
-        :key="producto.id + '-' + index"
-        class="producto-card"
-      >
-        <div class="info-producto">
-          <img
-            v-if="producto.imagen"
-            :src="producto.imagen"
-            alt="Imagen producto"
-            class="imagen-producto"
-          />
-          <div>
-            <h3>{{ producto.nombre }}</h3>
-            <p class="precio">$ {{ producto.precio.toFixed(2) }}</p>
-            <p class="stock" v-if="producto.stock !== undefined">Stock: {{ producto.stock }}</p>
-            <p class="codigo">Código: {{ producto.codigoBarras }}</p>
+      <!-- MODAL DE CONFIRMACIÓN -->
+      <div v-if="modalVisible" class="modal-overlay">
+        <div class="modal-contenido">
+          <p>¿Eliminar "<strong>{{ itemAEliminar?.nombre }}</strong>" del carrito?</p>
+          <div class="modal-botones">
+            <button @click="confirmarEliminacion(true)" class="btn-confirmar">Sí</button>
+            <button @click="confirmarEliminacion(false)" class="btn-cancelar">Cancelar</button>
           </div>
         </div>
-        <button
-          @click="agregarAlCarrito(producto)"
-          class="btn-agregar"
-          :disabled="producto.stock === 0"
+      </div>
+
+      <!-- Buscar producto -->
+      <section class="productos">
+        <h2>Buscar producto por nombre</h2>
+        <input
+          v-model="busquedaProducto"
+          type="text"
+          placeholder="Escribe el nombre del producto"
+          class="input-busqueda"
+        />
+        <div
+          v-for="(producto, index) in productosFiltrados"
+          :key="producto.id + '-' + index"
+          class="producto-card"
         >
-          Agregar
-        </button>
-      </div>
-      <p v-if="busquedaProducto && productosFiltrados.length === 0" class="no-resultados">
-        ❌ No se encontraron productos con ese nombre.
-      </p>
-    </section>
-
-    <!-- Código de barras -->
-    <div class="lector-codigo">
-      <input
-        id="codigoBarra"
-        v-model="codigoEscaneado"
-        type="text"
-        inputmode="numeric"
-        pattern="\d*"
-        maxlength="13"
-        @keyup.enter="procesarEscaneo"
-        placeholder="Escanea o escribe el código del producto"
-        ref="inputCodigo"
-        @focus="inputActivo = true"
-        @blur.capture="inputActivo = false"
-      />
-    </div>
-
-    <!-- Alerta si no se encuentra producto -->
-    <div v-if="productoNoEncontrado" class="alerta-error">
-      ❌ Producto no encontrado con ese código de barras.
-    </div>
-
-    <!-- Carrito -->
-    <section class="carrito">
-      <h2>Carrito</h2>
-      <div v-if="carrito.length === 0" class="empty-carrito">No hay productos en el carrito.</div>
-      <ul v-else class="lista-carrito">
-        <li v-for="(item, index) in carrito" :key="item.id + '-' + index" class="item-carrito">
-          <span>{{ item.nombre }}</span>
-          <div class="contador-cantidad">
-            <button @click="cambiarCantidad(item, -1)">-</button>
-            <span>{{ item.cantidad }}</span>
-            <button @click="cambiarCantidad(item, 1)" :disabled="item.cantidad >= item.stock">+</button>
+          <div class="info-producto">
+            <img
+              v-if="producto.imagen"
+              :src="producto.imagen"
+              alt="Imagen producto"
+              class="imagen-producto"
+            />
+            <div>
+              <h3>{{ producto.nombre }}</h3>
+              <p class="precio">$ {{ producto.precio.toFixed(2) }}</p>
+              <p class="stock" v-if="producto.stock !== undefined">Stock: {{ producto.stock }}</p>
+              <p class="codigo">Código: {{ producto.codigoBarras }}</p>
+            </div>
           </div>
-          <span class="subtotal">$ {{ (item.precio * item.cantidad).toFixed(2) }}</span>
-          <button class="btn-eliminar" @click="mostrarModal(item)">🗑</button>
-        </li>
-      </ul>
+          <button
+            @click="agregarAlCarrito(producto)"
+            class="btn-agregar"
+            :disabled="producto.stock === 0"
+          >
+            Agregar
+          </button>
+        </div>
+        <p v-if="busquedaProducto && productosFiltrados.length === 0" class="no-resultados">
+          ❌ No se encontraron productos con ese nombre.
+        </p>
+      </section>
 
-      <p class="total">Total: ${{ total.toFixed(2) }}</p>
-
-      <div class="metodo-pago">
-        <label>Método de pago:</label>
-        <label><input type="radio" value="efectivo" v-model="metodoPago" /> Efectivo</label>
-        <label><input type="radio" value="tarjeta" v-model="metodoPago" /> Tarjeta</label>
-        <label><input type="radio" value="transferencia" v-model="metodoPago" /> Transferencia</label>
-        <label><input type="radio" value="credito" v-model="metodoPago" /> Crédito</label>
+      <!-- Código de barras -->
+      <div class="lector-codigo">
+        <input
+          id="codigoBarra"
+          v-model="codigoEscaneado"
+          type="text"
+          inputmode="numeric"
+          pattern="\d*"
+          maxlength="13"
+          @keyup.enter="procesarEscaneo"
+          placeholder="Escanea o escribe el código del producto"
+          ref="inputCodigo"
+          @focus="inputActivo = true"
+          @blur.capture="inputActivo = false"
+        />
       </div>
 
-      <!-- FORMULARIO COMPLETO DE CRÉDITO -->
-      <div v-if="metodoPago === 'credito'" class="formulario-credito">
-        <h3>📋 Crear nuevo crédito</h3>
-        <div class="form-group">
-          <label for="nombreCredito">Nombre del cliente</label>
-          <input
-            id="nombreCredito"
-            v-model="nuevoCreditoCaja.nombre"
-            type="text"
-            placeholder="Nombre del cliente"
-          />
-        </div>
-        <div class="form-group">
-          <label>Monto del crédito</label>
-          <input :value="total.toFixed(2)" type="number" readonly />
-        </div>
-        <div class="form-group">
-          <label for="descripcionCredito">Descripción (motivo del crédito)</label>
-          <input
-            id="descripcionCredito"
-            v-model="nuevoCreditoCaja.descripcion"
-            type="text"
-            placeholder="Ejemplo: Préstamo por emergencia"
-          />
-        </div>
-        <button class="btn-crear" @click="guardarCredito">Otorgar crédito</button>
+      <!-- Alerta si no se encuentra producto -->
+      <div v-if="productoNoEncontrado" class="alerta-error">
+        ❌ Producto no encontrado con ese código de barras.
       </div>
 
-      <div v-if="totalAcumulado > 0" class="recuadro-total-acumulado">
-        <p><strong>Total acumulado del día:</strong> ${{ totalAcumulado.toFixed(2) }}</p>
-      </div>
+      <!-- Carrito -->
+      <section class="carrito">
+        <h2>Carrito</h2>
+        <div v-if="carrito.length === 0" class="empty-carrito">No hay productos en el carrito.</div>
+        <ul v-else class="lista-carrito">
+          <li v-for="(item, index) in carrito" :key="item.id + '-' + index" class="item-carrito">
+            <span>{{ item.nombre }}</span>
+            <div class="contador-cantidad">
+              <button @click="cambiarCantidad(item, -1)">-</button>
+              <span>{{ item.cantidad }}</span>
+              <button @click="cambiarCantidad(item, 1)" :disabled="item.cantidad >= item.stock">+</button>
+            </div>
+            <span class="subtotal">$ {{ (item.precio * item.cantidad).toFixed(2) }}</span>
+            <button class="btn-eliminar" @click="mostrarModal(item)">🗑</button>
+          </li>
+        </ul>
 
-      <button
-        @click="finalizarVenta"
-        :disabled="carrito.length === 0 || metodoPago === 'credito'"
-        class="btn-finalizar"
-      >
-        Finalizar Venta
-      </button>
-    </section>
+        <p class="total">Total: ${{ total.toFixed(2) }}</p>
 
-    <!-- Ticket -->
-    <section v-if="ventaFinalizada" class="ticket" id="ticket">
-      <h2>Ticket de Venta</h2>
-      <ul>
-        <li v-for="(item, index) in carritoAnterior" :key="item.id + '-' + index">
-          {{ item.nombre }} (x{{ item.cantidad }}) - ${{ (item.precio * item.cantidad).toFixed(2) }}
-        </li>
-      </ul>
-      <p><strong>Total: ${{ totalAnterior.toFixed(2) }}</strong></p>
-      <p>Método de pago: {{ metodoPagoAnterior }}</p>
-      <p>¡Gracias por su compra!</p>
-      <button @click="imprimirTicket" class="btn-imprimir">Imprimir Ticket</button>
-    </section>
-  </div>
-</template>
+        <div class="metodo-pago">
+          <label>Método de pago:</label>
+          <label><input type="radio" value="efectivo" v-model="metodoPago" /> Efectivo</label>
+          <label><input type="radio" value="tarjeta" v-model="metodoPago" /> Tarjeta</label>
+          <label><input type="radio" value="transferencia" v-model="metodoPago" /> Transferencia</label>
+          <label><input type="radio" value="credito" v-model="metodoPago" /> Crédito</label>
+        </div>
+
+        <!-- FORMULARIO COMPLETO DE CRÉDITO -->
+        <div v-if="metodoPago === 'credito'" class="formulario-credito">
+          <h3>📋 Crear nuevo crédito</h3>
+          <div class="form-group">
+            <label for="nombreCredito">Nombre del cliente</label>
+            <input
+              id="nombreCredito"
+              v-model="nuevoCreditoCaja.nombre"
+              type="text"
+              placeholder="Nombre del cliente"
+            />
+          </div>
+          <div class="form-group">
+            <label>Monto del crédito</label>
+            <input :value="total.toFixed(2)" type="number" readonly />
+          </div>
+          <div class="form-group">
+            <label for="descripcionCredito">Descripción (motivo del crédito)</label>
+            <input
+              id="descripcionCredito"
+              v-model="nuevoCreditoCaja.descripcion"
+              type="text"
+              placeholder="Ejemplo: Préstamo por emergencia"
+            />
+          </div>
+          <button class="btn-crear" @click="guardarCredito">Otorgar crédito</button>
+        </div>
+
+        <div v-if="totalAcumulado > 0" class="recuadro-total-acumulado">
+          <p><strong>Total acumulado del día:</strong> ${{ totalAcumulado.toFixed(2) }}</p>
+        </div>
+
+        <button
+          @click="finalizarVenta"
+          :disabled="carrito.length === 0 || metodoPago === 'credito'"
+          class="btn-finalizar"
+        >
+          Finalizar Venta
+        </button>
+      </section>
+
+      <!-- Ticket -->
+      <section v-if="ventaFinalizada" class="ticket" id="ticket">
+        <h2>Ticket de Venta</h2>
+        <ul>
+          <li v-for="(item, index) in carritoAnterior" :key="item.id + '-' + index">
+            {{ item.nombre }} (x{{ item.cantidad }}) - ${{ (item.precio * item.cantidad).toFixed(2) }}
+          </li>
+        </ul>
+        <p><strong>Total: ${{ totalAnterior.toFixed(2) }}</strong></p>
+        <p>Método de pago: {{ metodoPagoAnterior }}</p>
+        <p>¡Gracias por su compra!</p>
+        <button @click="imprimirTicket" class="btn-imprimir">Imprimir Ticket</button>
+      </section>
+    </div>
+  </template>
+
 
 <script>
 import { obtenerProductosPorSucursal, actualizarProductosPorSucursal } from '../productos.js';
-
 
 export default {
   data() {
@@ -189,14 +189,14 @@ export default {
       modalVisible: false,
       itemAEliminar: null,
       nuevoCreditoCaja: {
-      nombre: '',
-      descripcion: ''
+        nombre: '',
+        descripcion: ''
       },
-          alerta: {
-      visible: false,
-      mensaje: '',
-      tipo: 'exito'
-    }
+      alerta: {
+        visible: false,
+        mensaje: '',
+        tipo: 'exito'
+      }
     };
   },
   computed: {
@@ -210,14 +210,21 @@ export default {
     }
   },
   mounted() {
-    const sucursal = localStorage.getItem('store_code');
+    const sucursal = this.sucursal;
     if (!sucursal) return alert('Error: No se pudo determinar la sucursal.');
 
     this.productos = obtenerProductosPorSucursal(sucursal);
+    this.cargarTotalDelDia();
 
     const hoy = new Date().toISOString().slice(0, 10);
     const claveTotal = `total_acumulado_${sucursal}_${hoy}`;
     this.totalAcumulado = parseFloat(localStorage.getItem(claveTotal)) || 0;
+
+    // ✅ DINERO EN CAJA POR SUCURSAL
+    const claveDinero = `dinero_en_caja_${sucursal}`;
+    if (!localStorage.getItem(claveDinero)) {
+      localStorage.setItem(claveDinero, this.totalAcumulado.toFixed(2));
+    }
 
     const todasVentas = JSON.parse(localStorage.getItem('ventas_realizadas')) || [];
     this.ventasRealizadas = todasVentas.filter(v => v.sucursal === sucursal);
@@ -271,51 +278,112 @@ export default {
       this.agregarAlCarrito(producto);
       this.codigoEscaneado = '';
     },
-guardarCredito() {
-  if (!this.nuevoCreditoCaja.nombre.trim()) {
-    this.mostrarAlerta('⚠️ Ingresa el nombre del cliente.', 'error');
-    return;
-  }
-  if (!this.total || this.total <= 0) {
-    this.mostrarAlerta('⚠️ El carrito está vacío.', 'error');
-    return;
-  }
 
-  const nombre = this.nuevoCreditoCaja.nombre.trim();
-  const descripcion = this.nuevoCreditoCaja.descripcion.trim();
-  const monto = this.total;
-  const sucursal = this.sucursal;
-  const clientes = JSON.parse(localStorage.getItem('clientes')) || [];
+    guardarCredito() {
+      if (!this.nuevoCreditoCaja.nombre.trim()) {
+        this.mostrarAlerta('⚠️ Ingresa el nombre del cliente.', 'error');
+        return;
+      }
+      if (!this.total || this.total <= 0) {
+        this.mostrarAlerta('⚠️ El carrito está vacío.', 'error');
+        return;
+      }
 
-  const existente = clientes.find(
-    c => c.nombre.toLowerCase() === nombre.toLowerCase() && c.sucursal === sucursal
-  );
+      const nombre = this.nuevoCreditoCaja.nombre.trim();
+      const descripcionUsuario = this.nuevoCreditoCaja.descripcion.trim();
+      const monto = this.total;
+      const sucursal = this.sucursal;
 
-  if (existente) {
-    existente.creditoPendiente += monto;
-    existente.montoInicial += monto;
-    existente.descripcion += descripcion ? `; ${descripcion}` : '';
-  } else {
-    clientes.push({
-      id: Date.now(),
-      nombre,
-      creditoPendiente: monto,
-      montoInicial: monto,
-      descripcion,
-      historial: [],
-      sucursal
-    });
-  }
+      const detalleProductos = this.carrito
+        .map(item => `${item.nombre} x${item.cantidad}`)
+        .join(', ');
+      const descripcionCompleta = descripcionUsuario
+        ? `${descripcionUsuario}; Productos: ${detalleProductos}`
+        : `Productos: ${detalleProductos}`;
 
-  localStorage.setItem('clientes', JSON.stringify(clientes));
+      const claveClientes = `clientes_${sucursal}`;
+      const clientes = JSON.parse(localStorage.getItem(claveClientes)) || [];
 
-  this.nuevoCreditoCaja = { nombre: '', descripcion: '' };
-  this.carrito = [];
-  this.ventaFinalizada = false;
-  this.metodoPago = 'efectivo';
-  this.mostrarAlerta('✔️ Crédito guardado con éxito.', 'exito');
-},
+      const existente = clientes.find(
+        c => c.nombre.toLowerCase() === nombre.toLowerCase() && c.sucursal === sucursal
+      );
 
+      if (existente) {
+        existente.creditoPendiente += monto;
+        existente.montoInicial += monto;
+        existente.descripcion = descripcionCompleta;
+      } else {
+        clientes.push({
+          id: Date.now(),
+          nombre,
+          creditoPendiente: monto,
+          montoInicial: monto,
+          descripcion: descripcionCompleta,
+          historial: [],
+          sucursal
+        });
+      }
+
+      localStorage.setItem(claveClientes, JSON.stringify(clientes));
+
+      const usuarioActual = JSON.parse(localStorage.getItem('usuario')) || {
+        username: 'desconocido',
+        sucursal: 'sin_sucursal'
+      };
+
+      const ventaCredito = {
+        id: Date.now(),
+        productos: JSON.parse(JSON.stringify(this.carrito)),
+        total: this.total,
+        metodoPago: 'credito',
+        fecha: new Date().toISOString(),
+        usuario: {
+          nombre: usuarioActual.username,
+          sucursal: this.sucursal
+        },
+        sucursal: this.sucursal
+      };
+
+      const todasVentas = JSON.parse(localStorage.getItem('ventas_realizadas')) || [];
+      todasVentas.push(ventaCredito);
+      localStorage.setItem('ventas_realizadas', JSON.stringify(todasVentas));
+
+      this.$emit('nueva-venta', ventaCredito);
+
+      this.nuevoCreditoCaja = { nombre: '', descripcion: '' };
+      this.carrito = [];
+      this.ventaFinalizada = false;
+      this.metodoPago = 'efectivo';
+
+      this.mostrarAlerta('✔️ Crédito guardado sin afectar caja.', 'exito');
+    },
+
+    cargarTotalDelDia() {
+      const hoy = new Date().toISOString().slice(0, 10);
+      const sucursal = this.sucursal;
+      let total = 0;
+
+      const todasVentas = JSON.parse(localStorage.getItem('ventas_realizadas') || '[]');
+      const ventasHoy = todasVentas.filter(v =>
+        v.sucursal === sucursal &&
+        v.fecha?.startsWith(hoy) &&
+        v.metodoPago !== 'credito'
+      );
+      ventasHoy.forEach(v => total += v.total);
+
+      const pagosCredito = JSON.parse(localStorage.getItem('ingresos_credito') || '[]');
+      const pagosHoy = pagosCredito.filter(p =>
+        p.tipo === 'pago_credito' &&
+        p.sucursal === sucursal &&
+        p.fecha?.startsWith(hoy)
+      );
+      pagosHoy.forEach(p => total += p.monto);
+
+      this.totalAcumulado = total;
+
+      const claveTotal = `total_acumulado_${sucursal}_${hoy}`;
+      localStorage.setItem(claveTotal, total.toString());
+    },
 
     finalizarVenta() {
       if (this.metodoPago === 'credito') {
@@ -352,12 +420,14 @@ guardarCredito() {
       todasVentas.push(venta);
       localStorage.setItem('ventas_realizadas', JSON.stringify(todasVentas));
 
-      const hoy = new Date().toISOString().slice(0, 10);
-      const claveTotal = `total_acumulado_${this.sucursal}_${hoy}`;
-      const totalAnterior = parseFloat(localStorage.getItem(claveTotal)) || 0;
-      const nuevoTotal = totalAnterior + this.total;
-      localStorage.setItem(claveTotal, nuevoTotal.toString());
-      this.totalAcumulado = nuevoTotal;
+      this.sumarAlTotalDelDia(this.total);
+
+      // ✅ Actualizar dinero en caja por sucursal
+      const claveDinero = `dinero_en_caja_${this.sucursal}`;
+      const dineroActual = parseFloat(localStorage.getItem(claveDinero)) || 0;
+      const nuevoDinero = dineroActual + this.total;
+      localStorage.setItem(claveDinero, nuevoDinero.toFixed(2));
+      window.dispatchEvent(new Event("dinero-en-caja-actualizado"));
 
       this.$emit('nueva-venta', venta);
       this.carritoAnterior = [...this.carrito];
@@ -367,6 +437,16 @@ guardarCredito() {
       this.carrito = [];
       this.codigoEscaneado = '';
     },
+
+    sumarAlTotalDelDia(monto) {
+      const hoy = new Date().toISOString().slice(0, 10);
+      const claveTotal = `total_acumulado_${this.sucursal}_${hoy}`;
+      const totalAnterior = parseFloat(localStorage.getItem(claveTotal)) || 0;
+      const nuevoTotal = totalAnterior + monto;
+      localStorage.setItem(claveTotal, nuevoTotal.toString());
+      this.totalAcumulado = nuevoTotal;
+    },
+
     imprimirTicket() {
       const ticketContent = `
         <div style="text-align: left; font-size: 12px; font-family: monospace;">
@@ -410,6 +490,7 @@ guardarCredito() {
       }
       this.ventaFinalizada = false;
     },
+
     reenfocarInput() {
       setTimeout(() => {
         if (!this.inputActivo) {
@@ -417,22 +498,25 @@ guardarCredito() {
         }
       }, 100);
     },
+
     detectarEscape(event) {
       if (event.key === 'Escape') {
         this.reenfocarInput();
       }
     },
+
     mostrarAlerta(mensaje, tipo = 'exito') {
-  this.alerta.mensaje = mensaje;
-  this.alerta.tipo = tipo;
-  this.alerta.visible = true;
-  setTimeout(() => {
-    this.alerta.visible = false;
-  }, 3000);
-},
+      this.alerta.mensaje = mensaje;
+      this.alerta.tipo = tipo;
+      this.alerta.visible = true;
+      setTimeout(() => {
+        this.alerta.visible = false;
+      }, 3000);
+    }
   }
 };
 </script>
+
 
 
 

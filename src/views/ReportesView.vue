@@ -14,6 +14,8 @@
         <option value="efectivo">Efectivo</option>
         <option value="tarjeta">Tarjeta</option>
         <option value="transferencia">Transferencia</option>
+        <option value="credito">Crédito</option>
+        <option value="pagado">Pagado</option>
       </select>
 
       <label>Cajero:</label>
@@ -28,34 +30,40 @@
       </select>
     </div>
 
-<!-- Tabla con contenedor para scroll horizontal -->
-<div class="table-container">
-  <table>
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>Fecha</th>
-        <th>Cajero</th>
-        <th>Sucursal</th>
-        <th>Total</th>
-        <th>Método de pago</th>
-        <th>Detalles</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr v-for="venta in ventasFiltradas" :key="venta.id">
-        <td>{{ venta.id }}</td>
-        <td>{{ new Date(venta.fecha).toLocaleString() }}</td>
-        <td>{{ venta.usuario?.nombre || 'N/A' }}</td>
-        <td>{{ venta.usuario?.sucursal || 'N/A' }}</td>
-        <td>${{ venta.total.toFixed(2) }}</td>
-        <td>{{ venta.metodoPago }}</td>
-        <td><button class="ver-detalle" @click="verDetalle(venta)">🔍 Ver</button></td>
-      </tr>
-    </tbody>
-  </table>
-</div>
+    <!-- Tabla de ventas -->
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Fecha</th>
+            <th>Cajero</th>
+            <th>Sucursal</th>
+            <th>Total</th>
+            <th>Método de pago</th>
+            <th>Detalles</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="venta in ventasFiltradasConPagosCredito" :key="venta.id">
+            <td>{{ venta.id }}</td>
+            <td>{{ new Date(venta.fecha).toLocaleString() }}</td>
+            <td>{{ obtenerNombreCajero(venta) }}</td>
+            <td>{{ obtenerSucursalVenta(venta) }}</td>
+            <td>${{ venta.total.toFixed(2) }}</td>
 
+            <td :class="{ 
+              'pago-credito': venta.metodoPago === 'credito', 
+              'pago-pagado': venta.metodoPago === 'pagado' || venta.estadoCredito === 'pagado' 
+            }">
+              {{ venta.metodoPago === 'credito' ? 'Crédito' : (venta.estadoCredito === 'pagado' ? 'Pagado' : venta.metodoPago) }}
+            </td>
+
+            <td><button class="ver-detalle" @click="verDetalle(venta)">🔍 Ver</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
     <!-- Botones exportar -->
     <div class="export-buttons">
@@ -63,20 +71,32 @@
       <button @click="exportarExcel">Exportar a Excel</button>
     </div>
 
-    <!-- Modal de detalles -->
-    <ProductoVentaItem v-if="ventaSeleccionada" :venta="ventaSeleccionada" @cerrar="ventaSeleccionada = null" />
+    <!-- Modal detalle venta -->
+    <ProductoVentaItem
+      v-if="ventaSeleccionada"
+      :venta="ventaSeleccionada"
+      @cerrar="ventaSeleccionada = null"
+    />
+
+    <!-- Modal detalle crédito -->
+    <DetalleCreditoItem
+      v-if="creditoSeleccionado"
+      :credito="creditoSeleccionado"
+      @cerrar="creditoSeleccionado = null"
+    />
   </div>
 </template>
 
 <script>
 import ProductoVentaItem from '../components/ProductoVentaItem.vue'
+import DetalleCreditoItem from '../components/DetalleCreditoItem.vue'
 import jsPDF from 'jspdf'
 import 'jspdf-autotable'
 import * as XLSX from 'xlsx'
 import { saveAs } from 'file-saver'
 
 export default {
-  components: { ProductoVentaItem },
+  components: { ProductoVentaItem, DetalleCreditoItem },
   props: ['ventas'],
   data() {
     const hoy = new Date().toISOString().split('T')[0]
@@ -86,43 +106,72 @@ export default {
       filtroMetodo: '',
       filtroCajero: '',
       filtroSucursal: '',
-      ventaSeleccionada: null
+      ventaSeleccionada: null,
+      creditoSeleccionado: null
     }
   },
   computed: {
-    ventasFiltradas() {
-      return this.ventas.filter(venta => {
+    ventasFiltradasConPagosCredito() {
+      const creditosPagados = JSON.parse(localStorage.getItem('ingresos_credito') || '[]')
+
+      const pagosCreditoFormateados = creditosPagados.map((pago, i) => ({
+        id: `PC-${i + 1}`,
+        fecha: pago.fecha,
+        total: pago.monto,
+        metodoPago: 'pagado',
+        usuario: pago.usuario ?? { nombre: 'Desconocido', sucursal: pago.sucursal ?? 'Desconocida' },
+        estadoCredito: 'pagado',
+        cliente: pago.cliente || 'Desconocido',
+        sucursal: pago.sucursal ?? 'Desconocida',
+        descripcion: pago.descripcion || 'Sin descripción'  // Aquí agregamos la descripción
+      }))
+
+      const todasLasVentas = [...this.ventas, ...pagosCreditoFormateados]
+
+      return todasLasVentas.filter(venta => {
         const fechaVenta = new Date(venta.fecha)
         const inicio = new Date(this.fechaInicio)
         const fin = new Date(this.fechaFin)
         const dentroDeRango = fechaVenta >= inicio && fechaVenta <= new Date(fin.getTime() + 86400000 - 1)
-        const coincideMetodo = this.filtroMetodo ? venta.metodoPago === this.filtroMetodo : true
-        const coincideCajero = this.filtroCajero ? venta.usuario?.nombre?.toLowerCase().includes(this.filtroCajero.toLowerCase()) : true
-        const coincideSucursal = this.filtroSucursal ? (venta.usuario?.sucursal === this.filtroSucursal) : true
+
+        const cajeroNombre = this.obtenerNombreCajero(venta).toLowerCase()
+        const coincideMetodo = this.filtroMetodo ? (venta.metodoPago === this.filtroMetodo || venta.estadoCredito === this.filtroMetodo) : true
+        const coincideCajero = this.filtroCajero ? cajeroNombre.includes(this.filtroCajero.toLowerCase()) : true
+        const coincideSucursal = this.filtroSucursal ? (this.obtenerSucursalVenta(venta) === this.filtroSucursal) : true
+
         return dentroDeRango && coincideMetodo && coincideCajero && coincideSucursal
       })
-    },
-    ingresosTotales() {
-      return this.ventasFiltradas.reduce((sum, v) => sum + v.total, 0)
-    },
-    promedioVenta() {
-      return this.ventasFiltradas.length ? this.ingresosTotales / this.ventasFiltradas.length : 0
     }
   },
   methods: {
+    obtenerNombreCajero(venta) {
+      if (!venta.usuario) return 'Desconocido'
+      if (typeof venta.usuario === 'string') return venta.usuario
+      if (typeof venta.usuario === 'object' && venta.usuario.nombre) return venta.usuario.nombre
+      return 'Desconocido'
+    },
+    obtenerSucursalVenta(venta) {
+      return venta.usuario?.sucursal || venta.sucursal || 'Desconocida'
+    },
     verDetalle(venta) {
-      this.ventaSeleccionada = JSON.parse(JSON.stringify(venta))
+      if (venta.metodoPago === 'pagado' && venta.id.startsWith('PC-')) {
+        this.creditoSeleccionado = { ...venta }
+        this.ventaSeleccionada = null
+      } else {
+        this.ventaSeleccionada = { ...venta }
+        this.creditoSeleccionado = null
+      }
     },
     exportarPDF() {
       const doc = new jsPDF()
       doc.text("Reporte de Ventas", 14, 10)
-      const rows = this.ventasFiltradas.map(v => [
+      const rows = this.ventasFiltradasConPagosCredito.map(v => [
         v.id,
         new Date(v.fecha).toLocaleString(),
-        v.usuario?.nombre || 'N/A',
-        v.usuario?.sucursal || 'N/A',
+        this.obtenerNombreCajero(v),
+        this.obtenerSucursalVenta(v),
         `$${v.total.toFixed(2)}`,
-        v.metodoPago
+        v.estadoCredito === 'pendiente' ? 'Crédito' : (v.estadoCredito === 'pagado' ? 'Pagado' : v.metodoPago)
       ])
       doc.autoTable({
         head: [["ID", "Fecha", "Cajero", "Sucursal", "Total", "Método de Pago"]],
@@ -132,13 +181,13 @@ export default {
       doc.save("reporte_ventas.pdf")
     },
     exportarExcel() {
-      const data = this.ventasFiltradas.map(v => ({
+      const data = this.ventasFiltradasConPagosCredito.map(v => ({
         ID: v.id,
         Fecha: new Date(v.fecha).toLocaleString(),
-        Cajero: v.usuario?.nombre || 'N/A',
-        Sucursal: v.usuario?.sucursal || 'N/A',
+        Cajero: this.obtenerNombreCajero(v),
+        Sucursal: this.obtenerSucursalVenta(v),
         Total: v.total,
-        MetodoPago: v.metodoPago
+        MetodoPago: v.estadoCredito === 'pendiente' ? 'Crédito' : (v.estadoCredito === 'pagado' ? 'Pagado' : v.metodoPago)
       }))
       const ws = XLSX.utils.json_to_sheet(data)
       const wb = XLSX.utils.book_new()
@@ -334,5 +383,14 @@ td {
     margin: 0.3rem 0;
     width: 100%;
   }
+}
+.pago-credito {
+  color: red;
+  font-weight: bold;
+}
+
+.pago-pagado {
+  color: green;
+  font-weight: bold;
 }
 </style>

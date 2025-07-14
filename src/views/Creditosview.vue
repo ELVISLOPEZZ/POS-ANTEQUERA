@@ -2,17 +2,14 @@
   <div class="creditos-view">
     <h1>📋 Gestión de Créditos</h1>
 
-    <!-- 🔍 Filtros -->
-    <div class="filtros">
-      <input v-model="busqueda" placeholder="Buscar por nombre " />
-      <input v-model.number="filtroMonto" type="number" min="0" placeholder="Monto mínimo ($)" />
-      <button @click="exportarExcel">📅 Excel</button>
-      <button @click="exportarPDF">📄 PDF</button>
-    </div>
+    <p style="text-align:center; font-weight:600; color:#2e7d32;">
+  💰 Dinero en caja disponible: ${{ formatoMoneda(dineroEnCaja) }}
+</p>
+
 
     <!-- ➕ Nuevo crédito -->
     <div class="formulario-credito">
-      <h2>Crear nuevo crédito</h2>
+      <h2>"PRÉSTAMOS" Crear nuevo crédito</h2>
       <div class="form-group">
         <label for="nombreCliente">Nombre del cliente</label>
         <input id="nombreCliente" v-model="nuevoCredito.nombre" type="text" placeholder="Nombre del cliente" />
@@ -29,9 +26,17 @@
     </div>
 
     <!-- 🧾 Créditos activos -->
+    <h2 class="CAB">Creditos activos</h2>
+        <!-- 🔍 Filtros -->
+    <div class="filtros">
+      <input v-model="busqueda" placeholder="Buscar por nombre " />
+      <input v-model.number="filtroMonto" placeholder="Monto mínimo ($)" type="number" min="0" />
+      <button @click="exportarExcel">📅 Excel</button>
+      <button @click="exportarPDF">📄 PDF</button>
+    </div>
     <div v-for="cliente in clientesOrdenados" :key="cliente.id" class="card-cliente">
       <h2>{{ cliente.nombre }}</h2>
-      <p>💸 Deuda actual: <strong>${{ cliente.creditoPendiente.toFixed(2) }}</strong></p>
+      <p>💸 Deuda actual: <strong>${{ formatoMoneda(cliente.creditoPendiente) }}</strong></p>
       <p v-if="cliente.descripcion" class="descripcion"><strong>Descripción:</strong> {{ cliente.descripcion }}</p>
 
       <div class="acciones">
@@ -42,18 +47,9 @@
           min="1"
           placeholder="Monto a pagar"
         />
-        <button @click="registrarPago(cliente)">Registrar pago</button>
-        <button @click="solicitarEliminarDeuda(cliente)" class="btn-eliminar">❌ Eliminar deuda</button>
+        <button @click="registrarPago(cliente)">💰 Registrar pago</button>
+        <!-- Botón eliminar eliminado -->
       </div>
-
-      <details>
-        <summary>📜 Historial</summary>
-        <ul>
-          <li v-for="(pago, i) in cliente.historial" :key="i">
-            {{ new Date(pago.fecha).toLocaleString() }} - ${{ pago.monto.toFixed(2) }}
-          </li>
-        </ul>
-      </details>
     </div>
 
     <!-- Botón y filtros para historial -->
@@ -83,7 +79,7 @@
         <tbody>
           <tr v-for="(credito, i) in historialFiltrado" :key="i">
             <td>{{ credito.nombre }}</td>
-            <td>${{ credito.monto.toFixed(2) }}</td>
+            <td>${{ formatoMoneda(credito.monto) }}</td>
             <td>{{ credito.descripcion || '-' }}</td>
             <td>{{ new Date(credito.fecha).toLocaleString() }}</td>
           </tr>
@@ -100,17 +96,7 @@
         <button class="close-btn" @click="cerrarToast(toast.id)">×</button>
       </div>
     </transition-group>
-
-    <!-- Confirm modal -->
-    <div v-if="modalEliminar" class="modal-overlay" @click.self="modalEliminar = null">
-      <div class="modal-content">
-        <p>¿Eliminar deuda de <strong>{{ clienteEliminar?.nombre }}</strong>?</p>
-        <div class="modal-buttons">
-          <button @click="confirmarEliminarDeuda">Sí, eliminar</button>
-          <button @click="modalEliminar = null" class="btn-cancelar">Cancelar</button>
-        </div>
-      </div>
-    </div>
+    <!-- Modal eliminar eliminado -->
   </div>
 </template>
 
@@ -125,16 +111,16 @@ export default {
       clientes: [],
       historialFinalizados: [],
       busqueda: "",
-      filtroMonto: 0,
+      filtroMonto: null,
       nuevoCredito: { nombre: "", monto: null, descripcion: "" },
       toasts: [],
       toastId: 0,
-      modalEliminar: false,
-      clienteEliminar: null,
       mostrarHistorialFinalizados: false,
       filtroFechaInicio: "",
       filtroFechaFin: "",
-      sucursalActual: localStorage.getItem("store_code") || null
+      sucursalActual: localStorage.getItem("store_code") || null,
+      dineroEnCaja: parseFloat(localStorage.getItem(`dinero_en_caja_${localStorage.getItem("store_code")}`)) || 0,
+      pagando: false
     };
   },
   computed: {
@@ -144,10 +130,10 @@ export default {
           c.sucursal === this.sucursalActual &&
           c.creditoPendiente > 0 &&
           (c.nombre.toLowerCase().includes(this.busqueda.toLowerCase()) || c.id.toString().includes(this.busqueda)) &&
-          c.creditoPendiente >= this.filtroMonto
+          (this.filtroMonto === null || c.creditoPendiente >= this.filtroMonto)
         )
         .sort((a, b) => b.creditoPendiente - a.creditoPendiente)
-        .map(c => ({ ...c, pago: c.pago || null }));
+        .map(c => ({ ...c, pago: c.pago === 0 ? null : c.pago }));
     },
     historialFinalizadosSucursal() {
       return this.historialFinalizados.filter(c => c.sucursal === this.sucursalActual);
@@ -157,7 +143,6 @@ export default {
         const fecha = new Date(c.fecha);
         const inicio = this.filtroFechaInicio ? new Date(this.filtroFechaInicio) : null;
         const fin = this.filtroFechaFin ? new Date(this.filtroFechaFin) : null;
-
         if (inicio && fecha < inicio) return false;
         if (fin && fecha > fin) return false;
         return true;
@@ -165,95 +150,118 @@ export default {
     }
   },
   methods: {
-    crearCredito() {
-      const { nombre, monto, descripcion } = this.nuevoCredito;
-      if (!nombre.trim() || monto <= 0) {
-        this.mostrarToast("Ingresa un nombre válido y un monto mayor a 0.", "error");
-        return;
-      }
 
-      // Busca crédito existente en la sucursal actual
-      const existente = this.clientes.find(
-        c => c.nombre.toLowerCase() === nombre.toLowerCase() && c.sucursal === this.sucursalActual
-      );
-if (existente) {
-  existente.creditoPendiente += monto;
-  existente.montoInicial += monto;  // suma al monto inicial
-  existente.descripcion += descripcion ? `; ${descripcion}` : "";
-} else {
-  this.clientes.push({
-    id: Date.now(),
-    nombre: nombre.trim(),
-    creditoPendiente: monto,
-    montoInicial: monto,  // nuevo campo monto inicial
-    descripcion: descripcion.trim(),
-    historial: [],
+    crearCredito() {
+  const { nombre, monto, descripcion } = this.nuevoCredito;
+  const cajaKey = `dinero_en_caja_${this.sucursalActual}`;
+  const caja = parseFloat(localStorage.getItem(cajaKey)) || 0;
+
+  if (!nombre.trim() || monto <= 0) {
+    this.mostrarToast("⚠️Ingresa un nombre válido y un monto mayor a 0.", "error");
+    return;
+  }
+
+  if (monto > caja) {
+    this.mostrarToast("⚠️Monto excede el dinero disponible en caja.", "error");
+    return;
+  }
+
+  const existente = this.clientes.find(
+    c => c.nombre.toLowerCase() === nombre.toLowerCase() && c.sucursal === this.sucursalActual
+  );
+
+  if (existente) {
+    existente.creditoPendiente += monto;
+    existente.montoInicial += monto;
+    existente.descripcion += descripcion ? `; ${descripcion}` : "";
+  } else {
+    this.clientes.push({
+      id: Date.now(),
+      nombre: nombre.trim(),
+      creditoPendiente: monto,
+      montoInicial: monto,
+      descripcion: descripcion.trim(),
+      sucursal: this.sucursalActual
+    });
+  }
+
+  const nuevoTotal = caja - monto;
+  localStorage.setItem(cajaKey, nuevoTotal.toFixed(2));
+
+  this.nuevoCredito = { nombre: "", monto: null, descripcion: "" };
+  this.guardarClientes();
+  this.mostrarToast("Crédito otorgado y descontado de caja.", "exito");
+  this.dineroEnCaja = nuevoTotal;
+},
+
+registrarPago(cliente) {
+  if (this.pagando) return;
+  this.pagando = true;
+
+  if (!cliente.pago || cliente.pago <= 0) {
+    this.mostrarToast("⚠️Monto inválido.", "error");
+    this.pagando = false;
+    return;
+  }
+
+  if (cliente.pago !== cliente.creditoPendiente) {
+    this.mostrarToast("⚠️ Solo se permiten pagos exactos que liquiden toda la deuda.", "error");
+    this.pagando = false;
+    return;
+  }
+
+  const index = this.clientes.findIndex(c => c.id === cliente.id);
+  const montoPago = cliente.pago;
+  const clienteNombre = this.clientes[index].nombre;
+
+  this.clientes[index].creditoPendiente = 0;
+
+  const usuarioActual = JSON.parse(localStorage.getItem("usuario")) || {
+    username: "desconocido",
+    sucursal: "sin_sucursal"
+  };
+
+  const ingreso = {
+    tipo: "pago_credito",
+    monto: montoPago,
+    fecha: new Date().toISOString(),
+    sucursal: this.sucursalActual,
+    cliente: clienteNombre,
+    descripcion: this.clientes[index].descripcion || '',
+    usuario: {
+      nombre: usuarioActual.username,
+      sucursal: this.sucursalActual
+    }
+  };
+
+  const ingresos = JSON.parse(localStorage.getItem("ingresos_credito") || "[]");
+  ingresos.push(ingreso);
+  localStorage.setItem("ingresos_credito", JSON.stringify(ingresos));
+
+  this.historialFinalizados.push({
+    nombre: clienteNombre,
+    monto: this.clientes[index].montoInicial,
+    descripcion: this.clientes[index].descripcion,
+    fecha: new Date().toISOString(),
     sucursal: this.sucursalActual
   });
-}
 
-      this.nuevoCredito = { nombre: "", monto: null, descripcion: "" };
-      this.guardarClientes();
-      this.mostrarToast("Crédito otorgado con éxito.", "exito");
-    },
-    registrarPago(cliente) {
-      if (!cliente.pago || cliente.pago <= 0) {
-        this.mostrarToast("Monto inválido.", "error");
-        return;
-      }
-      if (cliente.pago > cliente.creditoPendiente) {
-        this.mostrarToast("El pago excede la deuda.", "error");
-        return;
-      }
+  this.clientes.splice(index, 1);
+  this.guardarClientes();
+  this.mostrarHistorialFinalizados = true;
+  this.mostrarToast("Crédito pagado y movido al historial.", "exito");
 
-      const index = this.clientes.findIndex(c => c.id === cliente.id);
-      this.clientes[index].creditoPendiente -= cliente.pago;
-      this.clientes[index].historial.push({
-        monto: cliente.pago,
-        fecha: new Date().toISOString()
-      });
+  const cajaKey = `dinero_en_caja_${this.sucursalActual}`;
+  const nuevoTotal = parseFloat(localStorage.getItem(cajaKey)) + montoPago;
+  localStorage.setItem(cajaKey, nuevoTotal.toFixed(2));
+  window.dispatchEvent(new Event("dinero-en-caja-actualizado"));
+  this.dineroEnCaja = nuevoTotal;
 
-  if (this.clientes[index].creditoPendiente <= 0) {
-  this.historialFinalizados.push({
-  nombre: this.clientes[index].nombre,
-  monto: this.clientes[index].montoInicial,  // monto original, no 0
-  descripcion: this.clientes[index].descripcion,
-  fecha: new Date().toISOString(),
-  sucursal: this.sucursalActual
-});
+  setTimeout(() => {
+    this.pagando = false;
+  }, 500);
+},
 
-        this.clientes.splice(index, 1);
-        this.mostrarHistorialFinalizados = true;
-        this.mostrarToast("Crédito pagado en su totalidad y movido al historial.", "exito");
-      } else {
-        this.mostrarToast("Pago registrado.", "exito");
-      }
-      this.guardarClientes();
-    },
-    solicitarEliminarDeuda(cliente) {
-      this.clienteEliminar = cliente;
-      this.modalEliminar = true;
-    },
-    confirmarEliminarDeuda() {
-      const index = this.clientes.findIndex(c => c.id === this.clienteEliminar.id);
-      const cliente = this.clientes[index];
-
-this.historialFinalizados.push({
-  nombre: cliente.nombre,
-  monto: cliente.montoInicial,  // monto original también aquí
-  descripcion: cliente.descripcion,
-  fecha: new Date().toISOString(),
-  sucursal: this.sucursalActual
-});
-
-
-      this.clientes.splice(index, 1);
-      this.guardarClientes();
-      this.modalEliminar = false;
-      this.clienteEliminar = null;
-      this.mostrarHistorialFinalizados = true;
-      this.mostrarToast("Deuda eliminada y enviada al historial.", "exito");
-    },
     exportarExcel() {
       const data = this.clientesOrdenados.map(c => ({
         fecha: new Date().toLocaleDateString(),
@@ -269,6 +277,7 @@ this.historialFinalizados.push({
       XLSX.utils.book_append_sheet(wb, ws, "Deudores");
       XLSX.writeFile(wb, "clientes_credito.xlsx");
     },
+
     exportarPDF() {
       const doc = new jsPDF();
       const data = this.clientesOrdenados.map(c => [
@@ -286,31 +295,61 @@ this.historialFinalizados.push({
       });
       doc.save("clientes_credito.pdf");
     },
+
     guardarClientes() {
-      localStorage.setItem("clientes", JSON.stringify(this.clientes));
-      localStorage.setItem("historialFinalizados", JSON.stringify(this.historialFinalizados));
-    },
+  const sucursal = this.sucursalActual;
+  const clientesKey = `clientes_${sucursal}`;
+  const historialKey = `historialFinalizados_${sucursal}`;
+
+  localStorage.setItem(clientesKey, JSON.stringify(this.clientes));
+  localStorage.setItem(historialKey, JSON.stringify(this.historialFinalizados));
+},
+
+
     cargarClientes() {
-      const datos = localStorage.getItem("clientes");
-      const historial = localStorage.getItem("historialFinalizados");
-      this.clientes = datos ? JSON.parse(datos) : [];
-      this.historialFinalizados = historial ? JSON.parse(historial) : [];
-      this.clientes.forEach(c => (c.historial ||= []));
-    },
+  const sucursal = this.sucursalActual;
+  const clientesKey = `clientes_${sucursal}`;
+  const historialKey = `historialFinalizados_${sucursal}`;
+  const dineroKey = `dinero_en_caja_${sucursal}`;
+
+  const datos = localStorage.getItem(clientesKey);
+  const historial = localStorage.getItem(historialKey);
+  this.clientes = datos ? JSON.parse(datos) : [];
+  this.historialFinalizados = historial ? JSON.parse(historial) : [];
+  this.dineroEnCaja = parseFloat(localStorage.getItem(dineroKey)) || 0;
+},
+
+
     mostrarToast(mensaje, tipo = "info") {
       const id = this.toastId++;
       this.toasts.push({ id, mensaje, tipo });
       setTimeout(() => this.cerrarToast(id), 4000);
     },
+
     cerrarToast(id) {
       this.toasts = this.toasts.filter(t => t.id !== id);
+    },
+
+    formatoMoneda(valor) {
+      const numero = parseFloat(valor);
+      return isNaN(numero) ? '0.00' : numero.toFixed(2);
+    },
+
+    actualizarDineroCaja() {
+      this.dineroEnCaja = parseFloat(localStorage.getItem("dinero_en_caja")) || 0;
     }
   },
-  mounted() {
-    this.cargarClientes();
+mounted() {
+  this.cargarClientes();
+  window.addEventListener("dinero-en-caja-actualizado", this.actualizarDineroCaja);
+},
+
+  beforeUnmount() {
+    window.removeEventListener("dinero-en-caja-actualizado", this.actualizarDineroCaja);
   }
 };
 </script>
+
 
 
 
@@ -426,6 +465,13 @@ this.historialFinalizados.push({
   background: #2e7d32;
 }
 
+h2.CAB {
+  margin-top: 2rem;
+  font-size: 1.8rem;
+  color: #2c3e50;
+  text-align: center;
+}
+
 /* Cards de clientes */
 .card-cliente {
   background: white;
@@ -493,36 +539,6 @@ this.historialFinalizados.push({
   background: #2e7d32;
 }
 
-.btn-eliminar {
-  background: #e53935;
-  color: white;
-  padding: 0.5rem 1rem;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.btn-eliminar:hover {
-  background: #b71c1c;
-}
-
-/* Detalles historial */
-details summary {
-  font-weight: 600;
-  cursor: pointer;
-  margin-top: 1rem;
-  color: #2e7d32;
-}
-
-details ul {
-  margin: 0.8rem 0 0 1rem;
-  padding-left: 1rem;
-  color: #555;
-}
-
-details ul li {
-  margin-bottom: 0.3rem;
-}
-
 /* Historial finalizados */
 .historial-finalizados {
   background: #e8f5e9;
@@ -536,17 +552,6 @@ details ul li {
   color: #2e7d32;
   font-weight: 700;
   margin-bottom: 1rem;
-}
-
-.historial-finalizados ul {
-  list-style: none;
-  padding: 0;
-  color: #555;
-}
-
-.historial-finalizados li {
-  margin-bottom: 0.6rem;
-  font-style: italic;
 }
 
 /* Toasts */
@@ -585,70 +590,6 @@ details ul li {
   font-size: 18px;
   cursor: pointer;
   margin-left: 12px;
-}
-
-/* Modal */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0,0,0,0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 999;
-}
-
-.modal-content {
-  background: white;
-  padding: 2rem;
-  border-radius: 10px;
-  width: 90%;
-  max-width: 480px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
-  text-align: center;
-}
-
-.modal-content p {
-  font-size: 1.1rem;
-  margin-bottom: 1.5rem;
-  color: #2e7d32;
-  font-weight: 600;
-}
-
-.modal-buttons {
-  display: flex;
-  justify-content: center;
-  gap: 1rem;
-}
-
-.modal-buttons button {
-  padding: 0.6rem 1.2rem;
-  border-radius: 6px;
-  font-weight: 600;
-  cursor: pointer;
-  border: none;
-  transition: background-color 0.3s ease;
-}
-
-.modal-buttons button:first-child {
-  background: #388e3c;
-  color: white;
-}
-
-.modal-buttons button:first-child:hover {
-  background: #2e7d32;
-}
-
-.modal-buttons button.btn-cancelar {
-  background: #757575;
-  color: white;
-}
-
-.modal-buttons button.btn-cancelar:hover {
-  background: #5a5a5a;
 }
 
 /* Botón para mostrar historial */
@@ -708,7 +649,7 @@ details ul li {
   border-bottom: none;
 }
 
-/* Responsive extra para móviles */
+/* Responsive */
 @media (max-width: 480px) {
   .creditos-view {
     padding: 1rem;
@@ -734,22 +675,9 @@ details ul li {
     font-size: 1.8rem;
   }
 
-  .modal-content {
-    padding: 1.2rem;
-  }
-
-  .modal-buttons {
-    flex-direction: column;
-  }
-
-  .modal-buttons button {
-    width: 100%;
-  }
-
   .toast {
     font-size: 0.9rem;
     padding: 10px 14px;
   }
 }
-
 </style>
