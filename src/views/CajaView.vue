@@ -1,6 +1,20 @@
   <template>
     <div class="caja-view">
-      <h1 class="titulo">Caja de Cobro</h1>
+      <h1 class="titulo">🪙Caja de Cobro</h1>
+
+      <div v-if="mostrarModalCambio" class="modal-overlay">
+  <div class="modal-contenido">
+    <h3>🪙 Ingresar cambio inicial en caja</h3>
+    <input
+      v-model.number="cambioInicial"
+      type="number"
+      placeholder="Ej. 500"
+    />
+    <div class="modal-botones">
+      <button class="btn-confirmar" @click="guardarCambioInicial">Guardar</button>
+    </div>
+  </div>
+</div>
 
       <!-- ALERTA GENERAL -->
       <div v-if="alerta.visible" :class="['alerta-general', alerta.tipo]">
@@ -98,7 +112,7 @@
           </li>
         </ul>
 
-        <p class="total">Total: ${{ total.toFixed(2) }}</p>
+        <p class="total">Total de ventas: ${{ total.toFixed(2) }}</p>
 
         <div class="metodo-pago">
           <label>Método de pago:</label>
@@ -165,7 +179,7 @@
     </div>
   </template>
 
-
+-------------------------------------------------------Scryp funcional----------------------------------------------------------------------
 <script>
 import { obtenerProductosPorSucursal, actualizarProductosPorSucursal } from '../productos.js';
 
@@ -173,6 +187,8 @@ export default {
   data() {
     return {
       sucursal: localStorage.getItem('store_code') || 'sin_sucursal',
+      mostrarModalCambio: false,
+      cambioInicial: 0,
       productos: [],
       carrito: [],
       codigoEscaneado: '',
@@ -189,8 +205,9 @@ export default {
       modalVisible: false,
       itemAEliminar: null,
       nuevoCreditoCaja: {
-        nombre: '',
-        descripcion: ''
+      nombre: '',
+      descripcion: '',
+      mostrarModalCambio: false,
       },
       alerta: {
         visible: false,
@@ -231,22 +248,62 @@ export default {
 
     this.$nextTick(() => this.$refs.inputCodigo?.focus());
     window.addEventListener('keydown', this.detectarEscape);
+
+    const claveCambio = `cambio_caja_${this.sucursal}_${new Date().toISOString().slice(0, 10)}`;
+if (!localStorage.getItem(claveCambio)) {
+  this.mostrarModalCambio = true;
+}
+
   },
   beforeUnmount() {
     window.removeEventListener('keydown', this.detectarEscape);
   },
   methods: {
-    agregarAlCarrito(producto) {
-      if (producto.stock === 0) return alert('Producto sin stock');
-      const encontrado = this.carrito.find(p => p.id === producto.id);
-      if (encontrado) {
-        if (encontrado.cantidad < producto.stock) encontrado.cantidad++;
-        else alert('No hay más stock disponible');
-      } else {
-        this.carrito.push({ ...producto, cantidad: 1 });
-      }
-      this.ventaFinalizada = false;
-    },
+    guardarCambioInicial() {
+  if (this.cambioInicial <= 0) {
+    alert('Ingresa un monto válido para el cambio en caja.');
+    return;
+  }
+
+  const claveCambio = `cambio_caja_${this.sucursal}_${new Date().toISOString().slice(0, 10)}`;
+  const usuario = JSON.parse(localStorage.getItem('usuario')) || { username: 'desconocido' };
+
+  const datosCambio = {
+    monto: this.cambioInicial,
+    usuario: usuario.username,
+    sucursal: this.sucursal,
+    fecha: new Date().toISOString()
+  };
+
+  localStorage.setItem(claveCambio, JSON.stringify(datosCambio));
+
+  // También lo sumamos a dinero en caja
+  const claveDinero = `dinero_en_caja_${this.sucursal}`;
+  const actual = parseFloat(localStorage.getItem(claveDinero)) || 0;
+  const nuevoTotal = actual + this.cambioInicial;
+  localStorage.setItem(claveDinero, nuevoTotal.toFixed(2));
+  window.dispatchEvent(new Event("dinero-en-caja-actualizado"));
+
+  this.mostrarModalCambio = false;
+},
+agregarAlCarrito(producto) {
+  if (producto.stock === 0) return alert('Producto sin stock');
+  const encontrado = this.carrito.find(p => p.id === producto.id);
+  if (encontrado) {
+    if (encontrado.cantidad < producto.stock) encontrado.cantidad++;
+    else alert('No hay más stock disponible');
+  } else {
+    this.carrito.push({ ...producto, cantidad: 1 });
+  }
+
+  this.ventaFinalizada = false;
+
+  // ✅ Limpia el buscador y oculta los resultados
+  this.busquedaProducto = '';
+
+  // ✅ Opcional: reenfocar input de código de barras
+  this.$nextTick(() => this.$refs.inputCodigo?.focus());
+},
     cambiarCantidad(item, delta) {
       const nuevaCantidad = item.cantidad + delta;
       if (nuevaCantidad < 1) return this.mostrarModal(item);
@@ -512,12 +569,44 @@ export default {
       setTimeout(() => {
         this.alerta.visible = false;
       }, 3000);
+    }, 
+    // 🔽 AGREGA ESTA FUNCIÓN AL FINAL DE "methods"
+realizarCorteDeCaja() {
+  const fecha = new Date().toISOString().slice(0, 10);
+  const hora = new Date().toLocaleTimeString();
+
+  const usuarioActual = JSON.parse(localStorage.getItem('usuario')) || {
+    username: 'desconocido',
+    sucursal: this.sucursal
+  };
+
+  const corte = {
+    timestamp: Date.now(),
+    fecha,
+    hora,
+    total: this.totalAcumulado.toFixed(2),
+    usuario: {
+      nombre: usuarioActual.username,
+      sucursal: this.sucursal
     }
+  };
+
+  const cortes = JSON.parse(localStorage.getItem('cortes_caja')) || [];
+  cortes.push(corte);
+  localStorage.setItem('cortes_caja', JSON.stringify(cortes));
+
+  // Resetear dinero en caja y total acumulado
+  const claveDinero = `dinero_en_caja_${this.sucursal}`;
+  localStorage.setItem(claveDinero, '0');
+  this.totalAcumulado = 0;
+
+  // Emitir evento y mostrar confirmación
+  window.dispatchEvent(new Event("dinero-en-caja-actualizado"));
+  this.mostrarAlerta('💸 Corte de caja realizado exitosamente.', 'exito');
+},
   }
 };
 </script>
-
-
 
 
 <style scoped>
@@ -1086,6 +1175,30 @@ export default {
 
 .alerta-general.error {
   background-color: #f44336; /* rojo */
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background-color: rgba(0,0,0,0.5);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 999;
+}
+
+.modal-contenido {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  width: 300px;
+  text-align: center;
+}
+
+.modal-contenido input {
+  width: 100%;
+  padding: 10px;
+  margin-top: 10px;
+  font-size: 16px;
 }
 
 </style>

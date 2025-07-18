@@ -8,15 +8,18 @@
         </button>
       </div>
 
-      <!-- Menú toggle -->
+      <!-- Menú lateral toggle -->
       <transition name="slide">
-        <nav v-show="menuAbierto || anchoPantalla >= 769" class="nav-botones">
-          <button @click="irA('Caja')" :class="{ activo: vista === 'Caja' }">Caja</button>
-          <button @click="irA('Creditos')" :class="{ activo: vista === 'Creditos' }">Créditos</button>
-          <button @click="irA('Inventario')" :class="{ activo: vista === 'Inventario' }">Inventario</button>
-          <button v-if="rolUsuario === 'admin'" @click="irA('Reportes')" :class="{ activo: vista === 'Reportes' }">Reportes</button>
-          <button v-if="rolUsuario === 'admin'" @click="irA('Administrador')" :class="{ activo: vista === 'Administrador' }">Administrador</button>
-          <button @click="cerrarSesion" class="btn-logout">Cerrar sesión</button>
+        <nav
+          v-show="menuAbierto || anchoPantalla >= 769"
+          class="nav-botones menu-lateral"
+        >
+          <button @click="irA('Caja')" :class="{ activo: vista === 'Caja' }">💵 Caja</button>
+          <button @click="irA('Creditos')" :class="{ activo: vista === 'Creditos' }">🧾 Créditos</button>
+          <button @click="irA('Inventario')" :class="{ activo: vista === 'Inventario' }">📦 Inventario</button>
+          <button v-if="rolUsuario === 'admin'" @click="irA('Reportes')" :class="{ activo: vista === 'Reportes' }">📊 Reportes</button>
+          <button v-if="rolUsuario === 'admin'" @click="irA('Administrador')" :class="{ activo: vista === 'Administrador' }">👤 Administrador</button>
+          <button @click="cerrarSesion" class="btn-logout">🔓 Cerrar sesión</button>
         </nav>
       </transition>
     </header>
@@ -97,24 +100,25 @@ export default {
       this.ventas.push(nuevaVenta)
       localStorage.setItem('ventas_realizadas', JSON.stringify(this.ventas))
     },
-    cerrarSesion() {
-      this.mostrarAlerta = true
-    },
-    confirmarCerrarSesion() {
-      this.$refs.cajaViewComponent?.cerrarCaja?.()
-      this.mostrarAlerta = false
-      this.mostrarCorteConfirmado = true
-    },
-    finalizarCorte() {
-      logout()
-      this.logueado = false
-      this.mostrarCorteConfirmado = false
-      this.sucursalActual = ''
-      this.rolUsuario = ''
-      localStorage.removeItem('store_code')
-      localStorage.removeItem('rol_usuario')
-      this.$router.push('/')
-    },
+cerrarSesion() {
+  this.mostrarAlerta = true;
+},
+confirmarCerrarSesion() {
+  this.$refs.cajaViewComponent?.realizarCorteDeCaja();
+
+  this.mostrarAlerta = false;
+  this.mostrarCorteConfirmado = true;
+},
+finalizarCorte() {
+  logout()
+  this.logueado = false
+  this.mostrarCorteConfirmado = false
+  this.sucursalActual = ''
+  this.rolUsuario = ''
+  localStorage.removeItem('store_code')
+  localStorage.removeItem('rol_usuario')
+  this.$router.push('/')
+},
     cancelarCerrarSesion() {
       this.mostrarAlerta = false
     },
@@ -137,7 +141,6 @@ export default {
       this.sucursalActual = localStorage.getItem('store_code') || ''
       this.rolUsuario = localStorage.getItem('rol_usuario') || ''
     }
-
     window.addEventListener('resize', this.actualizarAnchoPantalla)
   },
   unmounted() {
@@ -145,6 +148,8 @@ export default {
   }
 }
 </script>
+
+
 
 <style scoped>
 /* RESET */
@@ -217,11 +222,6 @@ body, html, #app {
   color: #4e342e;
   transition: all 0.3s ease;
 }
-.nav-botones button:nth-child(1)::before { content: "💵"; }
-.nav-botones button:nth-child(2)::before { content: "🧾"; }
-.nav-botones button:nth-child(3)::before { content: "📦"; }
-.nav-botones button:nth-child(4)::before { content: "📊"; }
-.nav-botones button:nth-child(5)::before { content: "👤"; }
 
 .nav-botones button:hover {
   background-color: #ffe0b2;
@@ -237,9 +237,6 @@ body, html, #app {
   background-color: #ef9a9a;
   color: #fff;
 }
-.btn-logout::before {
-  content: "🔓";
-}
 .btn-logout:hover {
   background-color: #c62828;
 }
@@ -249,20 +246,45 @@ body, html, #app {
   .menu-toggle {
     display: block;
   }
+
   .nav-botones {
     flex-direction: column;
     align-items: center;
     gap: 0.8rem;
   }
+
+  .menu-lateral {
+    position: fixed;
+    top: 80px;
+    right: 0;
+    width: 240px;
+    background: #fff6ec;
+    box-shadow: -4px 0 12px rgba(0,0,0,0.1);
+    border-left: 2px solid #bcaaa4;
+    padding: 1rem;
+    z-index: 1001;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.8rem;
+    border-radius: 12px 0 0 12px;
+  }
 }
 
-/* TRANSICIÓN SLIDE */
+/* TRANSICIÓN SLIDE Y SLIDE-RIGHT */
 .slide-enter-active, .slide-leave-active {
   transition: all 0.3s ease;
 }
 .slide-enter-from, .slide-leave-to {
   opacity: 0;
   transform: translateY(-10px);
+}
+
+.slide-right-enter-active, .slide-right-leave-active {
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+.slide-right-enter-from, .slide-right-leave-to {
+  transform: translateX(100%);
+  opacity: 0;
 }
 
 /* CONTENIDO */
@@ -272,7 +294,7 @@ body, html, #app {
   margin: auto;
 }
 
-/* MODALES (igual que antes) */
+/* MODALES */
 .modal-overlay {
   position: fixed;
   top: 0; left: 0;
@@ -329,35 +351,5 @@ body, html, #app {
 .btn-cancelar {
   background-color: #90a4ae;
   color: white;
-}
-@media (max-width: 768px) {
-  .menu-toggle {
-    display: block;
-  }
-
-  .menu-lateral {
-    position: fixed;
-    top: 80px;
-    right: 0;
-    width: 240px;
-    background: #fff6ec;
-    box-shadow: -4px 0 12px rgba(0,0,0,0.1);
-    border-left: 2px solid #bcaaa4;
-    padding: 1rem;
-    z-index: 1001;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.8rem;
-    border-radius: 12px 0 0 12px;
-  }
-}
-
-/* Animación slide desde la derecha */
-.slide-right-enter-active, .slide-right-leave-active {
-  transition: transform 0.3s ease, opacity 0.3s ease;
-}
-.slide-right-enter-from, .slide-right-leave-to {
-  transform: translateX(100%);
-  opacity: 0;
 }
 </style>

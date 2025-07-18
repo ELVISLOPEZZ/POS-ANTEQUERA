@@ -1,6 +1,6 @@
 <template>
   <div class="admin-view">
-    <h1>Gestión de Personal</h1>
+    <h1>🧍🏻Gestión de Personal</h1>
 
     <!-- FORMULARIO -->
     <form @submit.prevent="registrarUsuario" class="formulario">

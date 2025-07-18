@@ -1,9 +1,26 @@
 <template>
-  <div class="reporte-ventas">
-    <h1>Reporte de Ventas</h1>
+  <!-- Toggle tipo burbujita pro -->
+  <div class="tab-toggle">
+    <div class="toggle-bg" :class="{ 'right': pestañaActiva === 'pagos' }"></div>
+    <button
+      :class="{ activo: pestañaActiva === 'ventas' }"
+      @click="pestañaActiva = 'ventas'"
+    >
+      Ventas
+    </button>
+    <button
+      :class="{ activo: pestañaActiva === 'pagos' }"
+      @click="pestañaActiva = 'pagos'"
+    >
+      Pagos
+    </button>
+  </div>
 
-    <!-- Filtros -->
-    <div class="filtros">
+  <div class="reporte-ventas">
+    <h1>📊 Reporte de Ventas</h1>
+
+    <!-- Filtros visibles solo si está en pestaña ventas -->
+    <div class="filtros" v-if="pestañaActiva === 'ventas'">
       <label>Fecha:</label>
       <input type="date" v-model="fechaInicio" /> a
       <input type="date" v-model="fechaFin" />
@@ -30,8 +47,8 @@
       </select>
     </div>
 
-    <!-- Tabla de ventas -->
-    <div class="table-container">
+    <!-- Tabla de Ventas (solo si pestaña es ventas) -->
+    <div class="table-container" v-if="pestañaActiva === 'ventas'">
       <table>
         <thead>
           <tr>
@@ -51,34 +68,32 @@
             <td>{{ obtenerNombreCajero(venta) }}</td>
             <td>{{ obtenerSucursalVenta(venta) }}</td>
             <td>${{ venta.total.toFixed(2) }}</td>
-
             <td :class="{ 
               'pago-credito': venta.metodoPago === 'credito', 
               'pago-pagado': venta.metodoPago === 'pagado' || venta.estadoCredito === 'pagado' 
             }">
               {{ venta.metodoPago === 'credito' ? 'Crédito' : (venta.estadoCredito === 'pagado' ? 'Pagado' : venta.metodoPago) }}
             </td>
-
             <td><button class="ver-detalle" @click="verDetalle(venta)">🔍 Ver</button></td>
           </tr>
         </tbody>
       </table>
+
+      <div class="export-buttons">
+        <button @click="exportarPDF">Exportar a PDF</button>
+        <button @click="exportarExcel">Exportar a Excel</button>
+      </div>
     </div>
 
-    <!-- Botones exportar -->
-    <div class="export-buttons">
-      <button @click="exportarPDF">Exportar a PDF</button>
-      <button @click="exportarExcel">Exportar a Excel</button>
-    </div>
+    <!-- Aquí se carga el componente CortedeCaja cuando pestaña es 'pagos' -->
+    <CortedeCaja v-if="pestañaActiva === 'pagos'" />
 
-    <!-- Modal detalle venta -->
+    <!-- Modales -->
     <ProductoVentaItem
       v-if="ventaSeleccionada"
       :venta="ventaSeleccionada"
       @cerrar="ventaSeleccionada = null"
     />
-
-    <!-- Modal detalle crédito -->
     <DetalleCreditoItem
       v-if="creditoSeleccionado"
       :credito="creditoSeleccionado"
@@ -87,25 +102,29 @@
   </div>
 </template>
 
+
 <script>
 import ProductoVentaItem from '../components/ProductoVentaItem.vue'
 import DetalleCreditoItem from '../components/DetalleCreditoItem.vue'
+import CortedeCaja from '../components/CortedeCaja.vue' // Importa tu componente aquí
+
 import jsPDF from 'jspdf'
 import 'jspdf-autotable'
 import * as XLSX from 'xlsx'
 import { saveAs } from 'file-saver'
 
 export default {
-  components: { ProductoVentaItem, DetalleCreditoItem },
-  props: ['ventas'],
+  components: { ProductoVentaItem, DetalleCreditoItem, CortedeCaja },
+  props: ['ventas', 'sucursal'],
   data() {
     const hoy = new Date().toISOString().split('T')[0]
     return {
+      pestañaActiva: 'ventas', // pestaña inicial
       fechaInicio: hoy,
       fechaFin: hoy,
       filtroMetodo: '',
       filtroCajero: '',
-      filtroSucursal: '',
+      filtroSucursal: this.sucursal || '',
       ventaSeleccionada: null,
       creditoSeleccionado: null
     }
@@ -113,7 +132,6 @@ export default {
   computed: {
     ventasFiltradasConPagosCredito() {
       const creditosPagados = JSON.parse(localStorage.getItem('ingresos_credito') || '[]')
-
       const pagosCreditoFormateados = creditosPagados.map((pago, i) => ({
         id: `PC-${i + 1}`,
         fecha: pago.fecha,
@@ -123,21 +141,24 @@ export default {
         estadoCredito: 'pagado',
         cliente: pago.cliente || 'Desconocido',
         sucursal: pago.sucursal ?? 'Desconocida',
-        descripcion: pago.descripcion || 'Sin descripción'  // Aquí agregamos la descripción
+        descripcion: pago.descripcion || 'Sin descripción'
       }))
 
       const todasLasVentas = [...this.ventas, ...pagosCreditoFormateados]
 
       return todasLasVentas.filter(venta => {
-        const fechaVenta = new Date(venta.fecha)
-        const inicio = new Date(this.fechaInicio)
-        const fin = new Date(this.fechaFin)
-        const dentroDeRango = fechaVenta >= inicio && fechaVenta <= new Date(fin.getTime() + 86400000 - 1)
-
+        const fechaVentaStr = new Date(venta.fecha).toISOString().split('T')[0]
+        const dentroDeRango = fechaVentaStr >= this.fechaInicio && fechaVentaStr <= this.fechaFin
         const cajeroNombre = this.obtenerNombreCajero(venta).toLowerCase()
-        const coincideMetodo = this.filtroMetodo ? (venta.metodoPago === this.filtroMetodo || venta.estadoCredito === this.filtroMetodo) : true
-        const coincideCajero = this.filtroCajero ? cajeroNombre.includes(this.filtroCajero.toLowerCase()) : true
-        const coincideSucursal = this.filtroSucursal ? (this.obtenerSucursalVenta(venta) === this.filtroSucursal) : true
+        const coincideMetodo = this.filtroMetodo
+          ? venta.metodoPago === this.filtroMetodo || venta.estadoCredito === this.filtroMetodo
+          : true
+        const coincideCajero = this.filtroCajero
+          ? cajeroNombre.includes(this.filtroCajero.toLowerCase())
+          : true
+        const coincideSucursal = this.filtroSucursal
+          ? this.obtenerSucursalVenta(venta) === this.filtroSucursal
+          : true
 
         return dentroDeRango && coincideMetodo && coincideCajero && coincideSucursal
       })
@@ -202,10 +223,12 @@ export default {
 
 
 
-
 <style scoped>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
 
+/* =========================
+   Contenedor principal
+========================= */
 .reporte-ventas {
   max-width: 1000px;
   margin: 2rem auto;
@@ -221,11 +244,64 @@ export default {
   font-weight: 700;
   font-size: 2.2rem;
   color: #2c3e50;
-  margin-bottom: 1.5rem;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  margin-bottom: 1rem;
 }
 
-/* Filtros */
+/* =========================
+   Toggle tipo burbuja (pestañas)
+========================= */
+.tab-toggle {
+  position: relative;
+  display: flex;                 /* Para que margin: auto funcione y se centre */
+  border: 2px solid #4caf50;
+  border-radius: 999px;
+  background: #e8f5e9;
+  padding: 4px;
+  width: 250px;
+  margin: 0 auto 2rem;          /* Centra horizontalmente */
+  font-family: 'Poppins', sans-serif;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.06);
+  overflow: hidden;
+}
+
+.toggle-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  background: #4caf50;
+  border-radius: 999px;
+  transition: transform 0.3s ease;
+  z-index: 0;
+}
+
+.toggle-bg.right {
+  transform: translateX(100%);
+}
+
+.tab-toggle button {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #4caf50;
+  font-weight: 600;
+  font-size: 1rem;
+  padding: 0.6rem 0;
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+  border-radius: 999px;
+  transition: color 0.3s ease;
+}
+
+.tab-toggle button.activo {
+  color: white;
+}
+
+/* =========================
+   Filtros de búsqueda
+========================= */
 .filtros {
   display: flex;
   flex-wrap: wrap;
@@ -246,7 +322,6 @@ export default {
   padding: 0.6rem;
   border: 2px solid #c8e6c9;
   border-radius: 6px;
-  outline: none;
   font-size: 0.95rem;
   flex: 1 1 180px;
   min-width: 140px;
@@ -257,39 +332,20 @@ export default {
   border-color: #4caf50;
 }
 
-/* KPIs */
-.resumen {
-  background: #e8f5e9;
-  border-left: 5px solid #4caf50;
-  padding: 1rem 1.5rem;
-  border-radius: 8px;
-  margin-bottom: 1.5rem;
-  display: flex;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  font-weight: 600;
-  color: #2c3e50;
-}
-
-.resumen p {
-  margin: 0.5rem 0;
-  flex: 1 1 200px;
-}
-
-/* Tabla: Agregamos contenedor scroll para móvil */
+/* =========================
+   Tabla y contenedor scroll
+========================= */
 .table-container {
   overflow-x: auto;
   margin-bottom: 1.5rem;
-  box-shadow: 0 1px 6px rgba(0,0,0,0.1);
-  border-radius: 10px;
   background: white;
+  border-radius: 10px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.1);
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  border-radius: 10px;
-  overflow: hidden;
 }
 
 th, td {
@@ -310,6 +366,9 @@ td {
   color: #555;
 }
 
+/* =========================
+   Botón "Ver detalle"
+========================= */
 .ver-detalle {
   background: #4caf50;
   color: white;
@@ -325,7 +384,9 @@ td {
   background: #388e3c;
 }
 
-/* Botones Exportar */
+/* =========================
+   Botones exportar PDF y Excel
+========================= */
 .export-buttons {
   text-align: center;
   margin-top: 1rem;
@@ -337,9 +398,9 @@ td {
   border: none;
   padding: 0.6rem 1.2rem;
   margin: 0 0.5rem;
-  font-weight: 600;
   border-radius: 6px;
   cursor: pointer;
+  font-weight: 600;
   transition: background-color 0.3s ease;
 }
 
@@ -347,7 +408,33 @@ td {
   background: #1b5e20;
 }
 
-/* Responsive */
+/* =========================
+   Animaciones Fade para modales
+========================= */
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+}
+
+/* =========================
+   Estados de pago (colores)
+========================= */
+.pago-credito {
+  color: red;
+  font-weight: bold;
+}
+
+.pago-pagado {
+  color: green;
+  font-weight: bold;
+}
+
+/* =========================
+   Responsive - Adaptaciones para móviles
+========================= */
 @media (max-width: 768px) {
   .filtros {
     flex-direction: column;
@@ -358,12 +445,7 @@ td {
     margin-bottom: 0.2rem;
   }
 
-  .resumen {
-    flex-direction: column;
-    gap: 0.8rem;
-  }
-
-  table, .resumen p {
+  table, .ver-detalle {
     font-size: 0.9rem;
   }
 }
@@ -383,14 +465,5 @@ td {
     margin: 0.3rem 0;
     width: 100%;
   }
-}
-.pago-credito {
-  color: red;
-  font-weight: bold;
-}
-
-.pago-pagado {
-  color: green;
-  font-weight: bold;
 }
 </style>

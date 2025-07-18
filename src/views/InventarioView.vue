@@ -3,12 +3,12 @@
 
     <!-- Ventana emergente para mensajes temporales -->
     <transition name="fade">
-      <div v-if="mensajeEmergente" class="alerta-emergente">
+        <div v-if="mensajeEmergente" :class="['alerta-emergente', tipoMensaje]">
         {{ mensajeEmergente }}
       </div>
     </transition>
 
-    <h1>Inventario</h1>
+    <h1>📦Inventario</h1>
 
     <div v-if="alertaActiva" class="alerta-visual">
       ⚠️ Alerta: Los siguientes productos tienen bajo inventario:
@@ -29,9 +29,11 @@
       </ul>
     </div>
 
-    <div class="botones-superior" style="gap: 1rem; flex-wrap: wrap; align-items: center;">
+    <div class="botones-superior" style="gap: 0.7rem; flex-wrap: wrap; align-items: center;">
       <button class="btn-agregar" @click="agregarProducto">➕ Agregar Producto</button>
       <button class="btn-agregar" @click="abrirModalCategoria">📁 Añadir Categoría</button>
+      <button class="btn-agregar btn-eliminar-categoria" @click="abrirModalEliminarCategoria">🗑️ Eliminar Categoría</button>
+
 
       <div class="filtro-dropdown">
         <select v-model="categoriaSeleccionada" @change="aplicarFiltro">
@@ -40,6 +42,16 @@
         </select>
       </div>
 
+      <input
+        class="input-busqueda"
+        type="text"
+        v-model="terminoBusqueda"
+        placeholder="🔍 Buscar producto"
+        @input="aplicarFiltro"
+        style="min-width: 250px;"
+      />
+    </div>
+    
       <div class="filtro-dropdown">
         <select v-model="filtroStock" @change="aplicarFiltro">
           <option value="todos">Stock</option>
@@ -48,15 +60,7 @@
         </select>
       </div>
 
-      <input
-        class="input-busqueda"
-        type="text"
-        v-model="terminoBusqueda"
-        placeholder="🔍 Buscar producto..."
-        @input="aplicarFiltro"
-        style="min-width: 250px;"
-      />
-    </div>
+
 
     <div class="lista-productos">
       <div
@@ -96,6 +100,37 @@
       </div>
     </transition>
 
+<!-- Modal Eliminar Categoría -->
+<div v-if="modalEliminarCategoriaActivo" class="modal">
+  <div class="modal-contenido">
+    <h2>Eliminar Categoría</h2>
+    <p>Busca y selecciona una categoría para eliminarla (⚠️ si no tiene productos asignados).</p>
+
+    <input
+      type="text"
+      v-model="busquedaCategoriaEliminar"
+      placeholder="🔍 Buscar categoría..."
+      class="input-busqueda"
+    />
+
+    <div class="form-row">
+      <select v-model="categoriaAEliminar">
+        <option value="" disabled>Seleccione una categoría</option>
+        <option
+          v-for="cat in categoriasFiltradasEliminar"
+          :key="cat"
+        >{{ cat }}</option>
+      </select>
+    </div>
+
+    <div class="modal-acciones">
+      <button class="btn-eliminar-confirmar" @click="eliminarCategoria">🗑️ Eliminar</button>
+      <button class="btn-cancelar" @click="cancelarEliminarCategoria">❌ Cancelar</button>
+    </div>
+  </div>
+</div>
+
+
     <div v-if="modalActivo" class="modal">
       <div class="modal-contenido">
         <h2>{{ productoSeleccionado === null ? 'Agregar Producto' : 'Editar Producto' }}</h2>
@@ -107,10 +142,12 @@
             </div>
             <div class="form-row">
               <label for="categoria">Categoría</label>
-              <select id="categoria" v-model="formulario.categoria" required>
-                <option value="" disabled>Seleccione categoría</option>
-                <option v-for="cat in categorias" :key="cat">{{ cat }}</option>
-              </select>
+
+<select id="categoria" v-model="formulario.categoria" required>
+  <option value="" disabled>Seleccione categoría</option>
+  <option v-for="cat in categoriasUnicas" :key="cat">{{ cat }}</option>
+</select>
+
             </div>
             <div class="form-row">
               <label for="precio">Precio</label>
@@ -187,6 +224,7 @@ import { obtenerProductosPorSucursal } from '../productos.js'
 export default {
   data() {
     return {
+      obtenerProductosPorSucursal,
       sucursal: localStorage.getItem('store_code') || '',
       productos: [],
       siguienteId: Number(localStorage.getItem('siguienteId')) || 4,
@@ -201,20 +239,34 @@ export default {
       productosFiltrados: [],
       alertaActiva: false,
       productosBajoStock: [],
-      categorias: JSON.parse(localStorage.getItem('categorias')) || ['Ropa', 'Electrónica'],
+      categoriasPorSucursal: JSON.parse(localStorage.getItem('categoriasPorSucursal')) || {},
       mensajeEmergente: '',
       modalEliminarActivo: false,
       productoAEliminar: null,
       productosCaducados: [],
       alertaCaducidadActiva: false,
+      mensajeEmergente: '',
+      tipoMensaje: '', // ✅ nuevo: puede ser 'exito' o 'error'
+      modalEliminarCategoriaActivo: false,
+categoriaAEliminar: '',
+busquedaCategoriaEliminar: '',
+
     }
   },
-  computed: {
-    categoriasUnicas() {
-      const categoriasDeProductos = this.productos.map(p => p.categoria)
-      const todasCategorias = new Set([...categoriasDeProductos, ...this.categorias])
-      return Array.from(todasCategorias)
-    }
+computed: {
+categoriasUnicas() {
+  // Categorías de productos reales en esta sucursal
+  const categoriasProductos = this.productos.map(p => p.categoria)
+  // Categorías creadas manualmente para esta sucursal
+  const creadasSucursal = this.categoriasPorSucursal[this.sucursal] || []
+  const todas = new Set([...categoriasProductos, ...creadasSucursal])
+  return Array.from(todas)
+},
+categoriasFiltradasEliminar() {
+  const todas = this.categoriasPorSucursal[this.sucursal] || []
+  const termino = this.busquedaCategoriaEliminar.toLowerCase()
+  return todas.filter(cat => cat.toLowerCase().includes(termino))
+},
   },
   created() {
     let storeCode = localStorage.getItem('store_code')
@@ -245,16 +297,85 @@ export default {
       this.formCategoria = { nombre: '' }
       this.modalCategoriaActivo = true
     },
-    guardarCategoria() {
-      const nombre = this.formCategoria.nombre.trim()
-      if (nombre && !this.categorias.includes(nombre)) {
-        this.categorias.push(nombre)
-        localStorage.setItem('categorias', JSON.stringify(this.categorias))
-        this.modalCategoriaActivo = false
-      } else {
-        alert('La categoría ya existe o el nombre es inválido.')
-      }
-    },
+guardarCategoria() {
+  const nombre = this.formCategoria.nombre.trim()
+
+  if (!nombre) {
+    this.tipoMensaje = 'error'
+    this.mensajeEmergente = '❌ El nombre no puede estar vacío.'
+    setTimeout(() => this.mensajeEmergente = '', 3000)
+    return
+  }
+
+  // Inicializar si no existe aún la sucursal
+  if (!this.categoriasPorSucursal[this.sucursal]) {
+    this.categoriasPorSucursal[this.sucursal] = []
+  }
+
+  // Verificar si ya existe en esta sucursal
+  const yaExiste = this.categoriasPorSucursal[this.sucursal].includes(nombre) ||
+                   this.productos.some(p => p.categoria === nombre)
+
+  if (yaExiste) {
+    this.tipoMensaje = 'advertencia'
+    this.mensajeEmergente = `⚠️ La categoría "${nombre}" ya existe en esta sucursal.`
+    setTimeout(() => this.mensajeEmergente = '', 4000)
+    return
+  }
+
+  // Agregar categoría a la sucursal
+  this.categoriasPorSucursal[this.sucursal].push(nombre)
+  localStorage.setItem('categoriasPorSucursal', JSON.stringify(this.categoriasPorSucursal))
+
+  this.tipoMensaje = 'exito'
+  this.mensajeEmergente = `✅ Categoría "${nombre}" añadida a ${this.sucursal}.`
+  this.modalCategoriaActivo = false
+  this.formCategoria.nombre = ''
+
+  // Refrescar para filtros
+  this.refrescarProductos()
+  setTimeout(() => this.mensajeEmergente = '', 3000)
+},
+abrirModalEliminarCategoria() {
+  this.busquedaCategoriaEliminar = ''
+  this.categoriaAEliminar = ''
+  this.modalEliminarCategoriaActivo = true
+},
+
+cancelarEliminarCategoria() {
+  this.modalEliminarCategoriaActivo = false
+},
+
+eliminarCategoria() {
+  const categoria = this.categoriaAEliminar
+  if (!categoria) {
+    this.tipoMensaje = 'error'
+    this.mensajeEmergente = '❌ Debes seleccionar una categoría.'
+    setTimeout(() => (this.mensajeEmergente = ''), 3000)
+    return
+  }
+
+  const tieneProductos = this.productos.some(p => p.categoria === categoria)
+  if (tieneProductos) {
+    this.tipoMensaje = 'error'
+    this.mensajeEmergente = `⚠️ No se puede eliminar. Existen productos con la categoría "${categoria}".`
+    setTimeout(() => (this.mensajeEmergente = ''), 4000)
+    return
+  }
+
+  const categorias = this.categoriasPorSucursal[this.sucursal] || []
+  this.categoriasPorSucursal[this.sucursal] = categorias.filter(c => c !== categoria)
+
+  localStorage.setItem('categoriasPorSucursal', JSON.stringify(this.categoriasPorSucursal))
+
+  this.tipoMensaje = 'exito'
+  this.mensajeEmergente = `✅ Categoría "${categoria}" eliminada correctamente.`
+  this.modalEliminarCategoriaActivo = false
+  this.categoriaAEliminar = ''
+
+  this.refrescarProductos()
+  setTimeout(() => (this.mensajeEmergente = ''), 3000)
+},
     cancelarCategoria() {
       this.modalCategoriaActivo = false
     },
@@ -264,42 +385,76 @@ export default {
       this.formulario = { ...producto }
       this.modalActivo = true
     },
-    guardarCambios() {
-      const codigo = this.formulario.codigoBarras?.toString() || ''
-      if (!/^\d{1,13}$/.test(codigo)) {
-        alert('El código de barras debe tener solo números y máximo 13 dígitos.')
-        return
+guardarCambios() {
+  const codigo = this.formulario.codigoBarras?.toString().trim() || ''
+
+  if (!/^\d{1,13}$/.test(codigo)) {
+    this.tipoMensaje = 'error'
+    this.mensajeEmergente = '❌ El código de barras debe tener solo números y máximo 13 dígitos.'
+    setTimeout(() => {
+      this.mensajeEmergente = ''
+      this.tipoMensaje = ''
+    }, 4000)
+    return
+  }
+
+  let todosLosProductos = JSON.parse(localStorage.getItem('productos')) || []
+  const esNuevo = this.productoSeleccionado === null
+
+  // ✅ Filtramos los productos SOLO de esta sucursal
+  const productosSucursal = todosLosProductos.filter(p => p.sucursal === this.sucursal)
+
+  // ✅ Verificamos si ya existe un producto con el mismo código en esta sucursal
+  const yaExiste = productosSucursal.some(p =>
+    p.codigoBarras === codigo &&
+    (esNuevo || p.id !== this.productoSeleccionado)
+  )
+
+  if (yaExiste) {
+    this.tipoMensaje = 'error'
+    this.mensajeEmergente = `❌ Ya existe un producto con ese código de barras en la sucursal "${this.sucursal}".`
+    setTimeout(() => {
+      this.mensajeEmergente = ''
+      this.tipoMensaje = ''
+    }, 4000)
+    return
+  }
+
+  if (esNuevo) {
+    const nuevoProducto = {
+      id: this.siguienteId++,
+      ...this.formulario,
+      codigoBarras: codigo,
+      sucursal: this.sucursal
+    }
+    todosLosProductos.push(nuevoProducto)
+  } else {
+    const index = todosLosProductos.findIndex(p => p.id === this.productoSeleccionado)
+    if (index !== -1) {
+      todosLosProductos[index] = {
+        id: this.productoSeleccionado,
+        ...this.formulario,
+        codigoBarras: codigo,
+        sucursal: this.sucursal
       }
-      let todosLosProductos = JSON.parse(localStorage.getItem('productos')) || []
-      const esNuevo = this.productoSeleccionado === null
-      if (esNuevo) {
-        const nuevoProducto = {
-          id: this.siguienteId++,
-          ...this.formulario,
-          sucursal: this.sucursal
-        }
-        todosLosProductos.push(nuevoProducto)
-      } else {
-        const index = todosLosProductos.findIndex(p => p.id === this.productoSeleccionado)
-        if (index !== -1) {
-          todosLosProductos[index] = {
-            id: this.productoSeleccionado,
-            ...this.formulario,
-            sucursal: this.sucursal
-          }
-        }
-      }
-      localStorage.setItem('siguienteId', this.siguienteId)
-      localStorage.setItem('productos', JSON.stringify(todosLosProductos))
-      this.modalActivo = false
-      this.refrescarProductos()
-      this.mensajeEmergente = esNuevo
-        ? 'Producto creado exitosamente ✅'
-        : 'Producto editado correctamente ✏️✅'
-      setTimeout(() => {
-        this.mensajeEmergente = ''
-      }, 3000)
-    },
+    }
+  }
+
+  localStorage.setItem('siguienteId', this.siguienteId)
+  localStorage.setItem('productos', JSON.stringify(todosLosProductos))
+  this.modalActivo = false
+  this.refrescarProductos()
+
+  this.tipoMensaje = 'exito'
+  this.mensajeEmergente = esNuevo
+    ? '✅ Producto creado exitosamente'
+    : '✏️✅ Producto editado correctamente'
+
+  setTimeout(() => {
+    this.mensajeEmergente = ''
+    this.tipoMensaje = ''
+  }, 3000)
+},
     eliminarProducto(id) {
       const producto = this.productos.find(p => p.id === id)
       if (producto) {
@@ -405,7 +560,7 @@ h1 {
 }
 
 .filtro-dropdown select {
-  padding: 0.6rem 1rem;
+  padding: 0.6rem 0.5rem;
   border: 1px solid #ccc;
   border-radius: 8px;
   font-size: 1rem;
@@ -413,7 +568,7 @@ h1 {
 }
 
 .input-busqueda {
-  padding: 0.6rem 1rem;
+  padding: 0.8rem 0.1rem;
   border: 1px solid #ccc;
   border-radius: 8px;
   font-size: 1rem;
@@ -940,4 +1095,66 @@ h1 {
   border-color: #2f855a;
 }
 
+.alerta-emergente {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  padding: 15px 25px;
+  border-radius: 8px;
+  font-weight: bold;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  transition: all 0.3s ease-in-out;
+  animation: slideDown 0.5s ease-out;
+}
+
+/* Éxito */
+.alerta-emergente.exito {
+  background-color: #d4edda;
+  color: #155724;
+  border: 2px solid #28a745;
+}
+
+/* Error */
+.alerta-emergente.error {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 2px solid #dc3545;
+}
+
+.alerta-emergente.advertencia {
+  background-color: #ffe08a;
+  color: #7c5c00;
+  border: 1px solid #ff0000;
+}
+
+.btn-eliminar-confirmar {
+  background-color: #fe2f2c;
+  color: #ffffff;
+  border: none;
+  padding: 0.5rem 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  border-radius: 5px; 
+  transition: background-color 0.3s;
+}
+
+
+.modal .input-busqueda {
+  margin-bottom: 10px;
+}
+
+
+/* Animación */
+@keyframes slideDown {
+  from {
+    transform: translateX(-50%) translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
 </style>
