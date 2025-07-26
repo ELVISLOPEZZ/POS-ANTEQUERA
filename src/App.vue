@@ -55,8 +55,9 @@
         <p class="modal-texto">Se guardaron los datos del día correctamente.</p>
         <div class="modal-botones">
           <button @click="finalizarCorte" class="btn-confirmar">Aceptar</button>
-        </div>
+        </div>   
       </div>
+   
     </div>
   </div>
 </template>
@@ -104,20 +105,36 @@ cerrarSesion() {
   this.mostrarAlerta = true;
 },
 confirmarCerrarSesion() {
-  this.$refs.cajaViewComponent?.realizarCorteDeCaja();
-
+  // Cierra cualquier modal abierto
   this.mostrarAlerta = false;
-  this.mostrarCorteConfirmado = true;
+  this.mostrarCorteConfirmado = false;
+
+  if (this.rolUsuario === 'admin') {
+    // Cierre directo para admins
+    localStorage.removeItem('store_code');
+    localStorage.removeItem('rol_usuario');
+    this.logueado = false;
+    this.$router.push('/');
+  } else {
+    // Cajero: Realizar corte antes de cerrar sesión
+    this.$refs.cajaViewComponent?.realizarCorteDeCaja();
+    this.mostrarCorteConfirmado = true;
+  }
 },
 finalizarCorte() {
-  logout()
-  this.logueado = false
-  this.mostrarCorteConfirmado = false
-  this.sucursalActual = ''
-  this.rolUsuario = ''
-  localStorage.removeItem('store_code')
-  localStorage.removeItem('rol_usuario')
-  this.$router.push('/')
+  const sucursal = localStorage.getItem('store_code');
+  if (sucursal) {
+    localStorage.removeItem(`cambioInicial_${sucursal}`);
+  }
+
+  logout(); // función del auth.js
+  this.logueado = false;
+  this.sucursalActual = '';
+  this.rolUsuario = '';
+  this.mostrarCorteConfirmado = false;
+  localStorage.removeItem('store_code');
+  localStorage.removeItem('rol_usuario');
+  this.$router.push('/');
 },
     cancelarCerrarSesion() {
       this.mostrarAlerta = false
@@ -145,7 +162,11 @@ finalizarCorte() {
   },
   unmounted() {
     window.removeEventListener('resize', this.actualizarAnchoPantalla)
-  }
+  },
+  mounted() {
+  this.rolUsuario = localStorage.getItem('rol_usuario') || '';
+}
+
 }
 </script>
 

@@ -2,24 +2,14 @@
   <!-- Toggle tipo burbujita pro -->
   <div class="tab-toggle">
     <div class="toggle-bg" :class="{ 'right': pestañaActiva === 'pagos' }"></div>
-    <button
-      :class="{ activo: pestañaActiva === 'ventas' }"
-      @click="pestañaActiva = 'ventas'"
-    >
-      Ventas
-    </button>
-    <button
-      :class="{ activo: pestañaActiva === 'pagos' }"
-      @click="pestañaActiva = 'pagos'"
-    >
-      Pagos
-    </button>
+    <button :class="{ activo: pestañaActiva === 'ventas' }" @click="pestañaActiva = 'ventas'">Ventas</button>
+    <button :class="{ activo: pestañaActiva === 'pagos' }" @click="pestañaActiva = 'pagos'">Cortes</button>
   </div>
 
   <div class="reporte-ventas">
     <h1>📊 Reporte de Ventas</h1>
 
-    <!-- Filtros visibles solo si está en pestaña ventas -->
+    <!-- Filtros -->
     <div class="filtros" v-if="pestañaActiva === 'ventas'">
       <label>Fecha:</label>
       <input type="date" v-model="fechaInicio" /> a
@@ -40,14 +30,20 @@
 
       <label>Sucursal:</label>
       <select v-model="filtroSucursal">
-        <option value="">Todas</option>
+<option value="Todas">Todas</option>
         <option value="SUCURSAL1">Sucursal 1</option>
         <option value="SUCURSAL2">Sucursal 2</option>
         <option value="SUCURSAL3">Sucursal 3</option>
       </select>
+
+      <!-- Botones de exportación -->
+      <div class="export-buttons">
+        <button @click="exportarPDF">📄 Exportar a PDF</button>
+        <button @click="exportarExcel">📊 Exportar a Excel</button>
+      </div>
     </div>
 
-    <!-- Tabla de Ventas (solo si pestaña es ventas) -->
+    <!-- Tabla -->
     <div class="table-container" v-if="pestañaActiva === 'ventas'">
       <table>
         <thead>
@@ -78,29 +74,19 @@
           </tr>
         </tbody>
       </table>
-
-      <div class="export-buttons">
-        <button @click="exportarPDF">Exportar a PDF</button>
-        <button @click="exportarExcel">Exportar a Excel</button>
-      </div>
     </div>
 
-    <!-- Aquí se carga el componente CortedeCaja cuando pestaña es 'pagos' -->
+    <!-- Componente de Cortes -->
     <CortedeCaja v-if="pestañaActiva === 'pagos'" />
 
     <!-- Modales -->
-    <ProductoVentaItem
-      v-if="ventaSeleccionada"
-      :venta="ventaSeleccionada"
-      @cerrar="ventaSeleccionada = null"
-    />
-    <DetalleCreditoItem
-      v-if="creditoSeleccionado"
-      :credito="creditoSeleccionado"
-      @cerrar="creditoSeleccionado = null"
-    />
+    <ProductoVentaItem v-if="ventaSeleccionada" :venta="ventaSeleccionada" @cerrar="ventaSeleccionada = null" />
+    <DetalleCreditoItem v-if="creditoSeleccionado" :credito="creditoSeleccionado" @cerrar="creditoSeleccionado = null" />
   </div>
 </template>
+
+
+
 
 
 <script>
@@ -124,7 +110,7 @@ export default {
       fechaFin: hoy,
       filtroMetodo: '',
       filtroCajero: '',
-      filtroSucursal: this.sucursal || '',
+      filtroSucursal: 'Todas',
       ventaSeleccionada: null,
       creditoSeleccionado: null
     }
@@ -156,9 +142,8 @@ export default {
         const coincideCajero = this.filtroCajero
           ? cajeroNombre.includes(this.filtroCajero.toLowerCase())
           : true
-        const coincideSucursal = this.filtroSucursal
-          ? this.obtenerSucursalVenta(venta) === this.filtroSucursal
-          : true
+const coincideSucursal = this.filtroSucursal === 'Todas' || this.obtenerSucursalVenta(venta) === this.filtroSucursal
+
 
         return dentroDeRango && coincideMetodo && coincideCajero && coincideSucursal
       })
@@ -234,17 +219,19 @@ export default {
   margin: 2rem auto;
   padding: 2rem;
   font-family: 'Poppins', sans-serif;
-  background: #f9f9f9;
-  border-radius: 10px;
-  box-shadow: 0 0 15px rgba(0,0,0,0.08);
+  background: #e8f5e9;
+  border-radius: 12px;
+  box-shadow: 0 8px 20px rgba(46, 125, 50, 0.15);
+  color: #1b3e2a;
+  animation: fadeIn 0.4s ease-in;
 }
 
 .reporte-ventas h1 {
   text-align: center;
   font-weight: 700;
-  font-size: 2.2rem;
-  color: #2c3e50;
-  margin-bottom: 1rem;
+  font-size: 2.3rem;
+  color: #2e7d32;
+  margin-bottom: 1.5rem;
 }
 
 /* =========================
@@ -252,15 +239,15 @@ export default {
 ========================= */
 .tab-toggle {
   position: relative;
-  display: flex;                 /* Para que margin: auto funcione y se centre */
+  display: flex;
   border: 2px solid #4caf50;
   border-radius: 999px;
-  background: #e8f5e9;
-  padding: 4px;
-  width: 250px;
-  margin: 0 auto 2rem;          /* Centra horizontalmente */
+  background: #c8e6c9;
+  padding: 5px;
+  width: 280px;
+  margin: 0 auto 2.5rem;
   font-family: 'Poppins', sans-serif;
-  box-shadow: 0 3px 8px rgba(0,0,0,0.06);
+  box-shadow: 0 5px 15px rgba(46, 125, 50, 0.1);
   overflow: hidden;
 }
 
@@ -272,8 +259,9 @@ export default {
   height: 100%;
   background: #4caf50;
   border-radius: 999px;
-  transition: transform 0.3s ease;
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
 .toggle-bg.right {
@@ -285,9 +273,9 @@ export default {
   background: transparent;
   border: none;
   color: #4caf50;
-  font-weight: 600;
-  font-size: 1rem;
-  padding: 0.6rem 0;
+  font-weight: 700;
+  font-size: 1.1rem;
+  padding: 0.75rem 0;
   cursor: pointer;
   position: relative;
   z-index: 1;
@@ -296,7 +284,8 @@ export default {
 }
 
 .tab-toggle button.activo {
-  color: white;
+  color: #fff;
+  text-shadow: 0 0 5px rgba(255, 255, 255, 0.7);
 }
 
 /* =========================
@@ -305,8 +294,8 @@ export default {
 .filtros {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  gap: 1.2rem;
+  margin-bottom: 2rem;
   align-items: center;
   justify-content: space-between;
 }
@@ -314,22 +303,32 @@ export default {
 .filtros label {
   font-weight: 600;
   color: #2e7d32;
-  min-width: 90px;
+  min-width: 100px;
+  font-size: 0.95rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
 }
 
 .filtros input,
 .filtros select {
-  padding: 0.6rem;
-  border: 2px solid #c8e6c9;
-  border-radius: 6px;
-  font-size: 0.95rem;
+  padding: 0.55rem 1rem;
+  border: 2px solid #a5d6a7;
+  border-radius: 8px;
+  font-size: 1rem;
   flex: 1 1 180px;
-  min-width: 140px;
+  min-width: 150px;
+  background-color: #fafafa;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  color: #1b3e2a;
+  font-weight: 500;
 }
 
 .filtros input:focus,
 .filtros select:focus {
   border-color: #4caf50;
+  outline: none;
+  box-shadow: 0 0 8px rgba(76, 175, 80, 0.4);
 }
 
 /* =========================
@@ -337,33 +336,51 @@ export default {
 ========================= */
 .table-container {
   overflow-x: auto;
-  margin-bottom: 1.5rem;
-  background: white;
-  border-radius: 10px;
-  box-shadow: 0 1px 6px rgba(0,0,0,0.1);
+  margin-bottom: 2rem;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 4px 18px rgba(46, 125, 50, 0.1);
+  border: 1px solid #a5d6a7;
 }
 
 table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: 850px;
+  font-size: 0.95rem;
+  color: #1b3e2a;
 }
 
 th, td {
-  padding: 1rem;
+  padding: 1rem 1.2rem;
   text-align: center;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid #c8e6c9;
   white-space: nowrap;
+  font-weight: 500;
+  transition: background-color 0.2s ease;
 }
 
 th {
   background: #2e7d32;
-  color: white;
-  font-weight: 600;
+  color: #e8f5e9;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
 }
 
 td {
-  font-size: 0.95rem;
-  color: #555;
+  background-color: #f1f8e9;
+  font-weight: 600;
+}
+
+tr:nth-child(even) td {
+  background-color: #e6f2df;
+}
+
+tr:hover td {
+  background-color: #c8e6c9;
+  cursor: pointer;
 }
 
 /* =========================
@@ -372,64 +389,85 @@ td {
 .ver-detalle {
   background: #4caf50;
   color: white;
-  padding: 0.4rem 0.9rem;
+  padding: 0.45rem 1rem;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
-  font-weight: 600;
-  transition: background-color 0.3s ease;
+  font-weight: 700;
+  font-size: 0.9rem;
+  box-shadow: 0 4px 8px rgba(76, 175, 80, 0.3);
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .ver-detalle:hover {
   background: #388e3c;
+  box-shadow: 0 6px 14px rgba(56, 142, 60, 0.6);
 }
 
 /* =========================
    Botones exportar PDF y Excel
 ========================= */
 .export-buttons {
-  text-align: center;
-  margin-top: 1rem;
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .export-buttons button {
   background: #2e7d32;
   color: white;
   border: none;
-  padding: 0.6rem 1.2rem;
-  margin: 0 0.5rem;
-  border-radius: 6px;
+  padding: 0.7rem 1.6rem;
+  border-radius: 10px;
   cursor: pointer;
-  font-weight: 600;
-  transition: background-color 0.3s ease;
+  font-weight: 700;
+  font-size: 1rem;
+  box-shadow: 0 6px 15px rgba(46, 125, 50, 0.3);
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
+  user-select: none;
 }
 
 .export-buttons button:hover {
   background: #1b5e20;
+  box-shadow: 0 8px 20px rgba(27, 94, 32, 0.7);
 }
 
 /* =========================
-   Animaciones Fade para modales
+   Animaciones Fade para modales y tabla
 ========================= */
-.fade-enter-active, .fade-leave-active {
-  transition: opacity 0.3s ease;
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.35s ease;
 }
 
-.fade-enter-from, .fade-leave-to {
+.fade-enter-from,
+.fade-leave-to {
   opacity: 0;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* =========================
    Estados de pago (colores)
 ========================= */
 .pago-credito {
-  color: red;
-  font-weight: bold;
+  color: #d32f2f;
+  font-weight: 700;
 }
 
 .pago-pagado {
-  color: green;
-  font-weight: bold;
+  color: #2e7d32;
+  font-weight: 700;
 }
 
 /* =========================
@@ -442,17 +480,23 @@ td {
   }
 
   .filtros label {
-    margin-bottom: 0.2rem;
+    margin-bottom: 0.3rem;
+    min-width: auto;
   }
 
-  table, .ver-detalle {
+  table,
+  .ver-detalle {
     font-size: 0.9rem;
+  }
+
+  .tab-toggle {
+    width: 220px;
   }
 }
 
 @media (max-width: 480px) {
   .reporte-ventas {
-    padding: 1rem;
+    padding: 1rem 1.2rem;
   }
 
   .filtros input,
@@ -461,9 +505,14 @@ td {
     min-width: auto;
   }
 
+  .export-buttons {
+    flex-direction: column;
+  }
+
   .export-buttons button {
-    margin: 0.3rem 0;
     width: 100%;
+    margin-bottom: 0.8rem;
   }
 }
 </style>
+

@@ -104,7 +104,7 @@
 <div v-if="modalEliminarCategoriaActivo" class="modal">
   <div class="modal-contenido">
     <h2>Eliminar Categoría</h2>
-    <p>Busca y selecciona una categoría para eliminarla (⚠️ si no tiene productos asignados).</p>
+    <p>Busca y selecciona una categoría para eliminarla (⚠️ solo si no tiene productos asignados, se creo por error o duplicado).</p>
 
     <input
       type="text"

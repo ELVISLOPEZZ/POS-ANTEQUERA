@@ -1,179 +1,246 @@
 <template>
   <div class="corte-caja">
-    <h2>📦 Cortes de Caja del Día</h2>
+    <h1>Cortes de Caja</h1>
 
+    <!-- Filtros -->
     <div class="filtros">
-      <label>Sucursal:</label>
-      <select v-model="filtroSucursal">
-        <option value="">Todas</option>
-        <option value="SUCURSAL1">Sucursal 1</option>
-        <option value="SUCURSAL2">Sucursal 2</option>
-        <option value="SUCURSAL3">Sucursal 3</option>
-      </select>
+      <label>
+        Fecha:
+        <input type="date" v-model="filtroFecha" />
+      </label>
 
-      <label>Cajero:</label>
-      <input type="text" v-model="filtroCajero" placeholder="Nombre del cajero" />
+      <label>
+        Sucursal:
+        <select v-model="filtroSucursal">
+          <option value="">Todas</option>
+          <option value="SUCURSAL1">Sucursal 1</option>
+          <option value="SUCURSAL2">Sucursal 2</option>
+          <option value="SUCURSAL3">Sucursal 3</option>
+        </select>
+      </label>
+
+      <label>
+        Cajero:
+        <input type="text" v-model="filtroCajero" placeholder="Nombre del cajero" />
+      </label>
     </div>
 
-    <div class="tabla-cortes">
-      <table>
-        <thead>
-          <tr>
-            <th>Fecha</th>
-            <th>Hora</th>
-            <th>Cajero</th>
-            <th>Sucursal</th>
-            <th>Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="(corte, i) in cortesFiltrados" :key="i">
-            <td>{{ corte.fecha }}</td>
-            <td>{{ corte.hora || new Date(corte.timestamp).toLocaleTimeString() }}</td>
-            <td>{{ obtenerNombreCajero(corte) }}</td>
-            <td>{{ obtenerSucursalCorte(corte) }}</td>
-            <td>${{ parseFloat(corte.total).toFixed(2) }}</td>
-          </tr>
-          <tr v-if="cortesFiltrados.length === 0">
-            <td colspan="5">No hay cortes disponibles.</td>
-          </tr>
-        </tbody>
-      </table>
+    <table class="tabla-cortes">
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Hora</th>
+          <th>Sucursal</th>
+          <th>Cajero</th>
+          <th>Cambio Inicial</th>
+          <th>Total Ventas</th>
+          <th>Total en Caja</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="(corte, index) in cortesFiltrados" :key="index">
+          <td>{{ corte.fecha }}</td>
+          <td>{{ corte.hora }}</td>
+          <td>{{ corte.sucursal }}</td>
+          <td>{{ corte.usuario?.nombre || '---' }}</td>
+          <td>${{ corte.cambioInicial }}</td>
+          <td>${{ corte.totalVentas }}</td>
+          <td><strong>${{ corte.total }}</strong></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div v-if="cortesFiltrados.length === 0" class="mensaje-vacio">
+      No hay cortes que coincidan con los filtros.
     </div>
   </div>
 </template>
 
 <script>
 export default {
-  name: "CortedeCaja",
+  name: "CorteDeCaja",
   data() {
     return {
       cortesHoy: [],
-      filtroSucursal: '',
-      filtroCajero: '',
+      filtroSucursal: "",
+      filtroCajero: "",
+      filtroFecha: this.obtenerFechaLocal(),
     };
   },
   computed: {
     cortesFiltrados() {
-      return this.cortesHoy.filter(corte => {
-        const nombreCajero = this.obtenerNombreCajero(corte).toLowerCase();
-        const filtroCajero = this.filtroCajero.toLowerCase();
+      return this.cortesHoy.filter((corte) => {
+        const coincideSucursal = !this.filtroSucursal || corte.sucursal.toLowerCase().includes(this.filtroSucursal.toLowerCase());
+        const coincideCajero = !this.filtroCajero || (corte.usuario?.nombre || "").toLowerCase().includes(this.filtroCajero.toLowerCase());
+        const coincideFecha = !this.filtroFecha || corte.fecha === this.filtroFecha;
 
-        const coincideCajero = this.filtroCajero
-          ? nombreCajero.includes(filtroCajero)
-          : true;
-
-        const filtroSuc = this.filtroSucursal.toLowerCase();
-        const sucursalCorte = this.obtenerSucursalCorte(corte).toLowerCase();
-
-        const coincideSucursal = this.filtroSucursal
-          ? sucursalCorte === filtroSuc
-          : true;
-
-        return coincideCajero && coincideSucursal;
+        return coincideSucursal && coincideCajero && coincideFecha;
       });
-    }
-  },
-  methods: {
-    cargarCortes() {
-      const hoy = new Date().toISOString().slice(0, 10);
-      const cortesRaw = JSON.parse(localStorage.getItem('cortes_caja') || '[]');
-
-      const cortesNormalizados = cortesRaw.map(corte => {
-        const fecha = corte.fecha || new Date(corte.timestamp).toISOString().slice(0, 10);
-        let usuario = corte.usuario;
-        if (!usuario || typeof usuario !== 'object') {
-          usuario = { nombre: 'Desconocido', sucursal: 'Desconocida' };
-        } else if (typeof usuario === 'string') {
-          usuario = { nombre: usuario, sucursal: corte.sucursal || 'Desconocida' };
-        }
-        return {
-          ...corte,
-          fecha,
-          usuario,
-          sucursal: corte.sucursal || usuario.sucursal || 'Desconocida',
-        };
-      });
-
-      const cortesHoy = cortesNormalizados.filter(corte => corte.fecha === hoy);
-
-      // Orden descendente (más reciente arriba)
-      cortesHoy.sort((a, b) => b.timestamp - a.timestamp);
-
-      this.cortesHoy = cortesHoy;
     },
-    obtenerNombreCajero(corte) {
-      if (!corte.usuario) return 'Desconocido';
-      if (typeof corte.usuario === 'string') return corte.usuario;
-      if (typeof corte.usuario === 'object' && corte.usuario.nombre) return corte.usuario.nombre;
-      return 'Desconocido';
-    },
-    obtenerSucursalCorte(corte) {
-      return corte.usuario?.sucursal || corte.sucursal || 'Desconocida';
-    }
   },
   mounted() {
-    this.cargarCortes();
-    window.addEventListener('corte-realizado', this.cargarCortes);
+    const cortesGuardados = JSON.parse(localStorage.getItem("cortes_realizados")) || [];
+    
+    this.cortesHoy = cortesGuardados.map((corte) => {
+      const totalVentas = corte.ventas?.reduce((sum, venta) => sum + (venta.total || 0), 0) || 0;
+      return {
+        ...corte,
+        totalVentas,
+        total: totalVentas + (corte.cambioInicial || 0)
+      };
+    });
   },
-  beforeUnmount() {
-    window.removeEventListener('corte-realizado', this.cargarCortes);
-  }
+  methods: {
+    obtenerFechaLocal() {
+      const ahora = new Date();
+      const offset = ahora.getTimezoneOffset();
+      const localDate = new Date(ahora.getTime() - offset * 60000);
+      return localDate.toISOString().split("T")[0];
+    },
+  },
 };
 </script>
 
 
 
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
 
-
-<style scoped>
 .corte-caja {
-  background: #f3f7f8;
-  padding: 2rem;
-  border-radius: 10px;
+  background: #f9fbfc;
+  padding: 2rem 2.5rem;
+  border-radius: 12px;
   font-family: 'Poppins', sans-serif;
   color: #333;
-  box-shadow: 0 0 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  margin-top: 2rem;
+  animation: fadeInScale 0.4s ease-out;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
+@keyframes fadeInScale {
+  0% {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.corte-caja h1 {
+  font-size: 2rem;
+  margin-bottom: 1.8rem;
+  color: #356c94; /* color original */
+  font-weight: 600;
+  text-align: center;
+}
+
+/* Filtros */
 .filtros {
   display: flex;
-  gap: 1rem;
-  margin-bottom: 1.2rem;
-  align-items: center;
   flex-wrap: wrap;
+  gap: 1.5rem;
+  justify-content: center;
+  margin-bottom: 2rem;
 }
 
 .filtros label {
-  font-weight: bold;
+  display: flex;
+  flex-direction: column;
+  font-weight: 600;
+  color: #356c94; /* color original */
+  font-size: 0.95rem;
+  min-width: 180px;
 }
 
 .filtros input,
 .filtros select {
-  padding: 0.5rem;
-  border-radius: 6px;
-  border: 1px solid #ccc;
+  margin-top: 0.4rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: 8px;
+  border: 1.5px solid #a7b9ce; /* un gris azulado suave */
+  background: #fff;
+  font-size: 0.95rem;
+  color: #333;
+  transition: border-color 0.3s ease;
+  outline-offset: 2px;
 }
 
+.filtros input:focus,
+.filtros select:focus {
+  border-color: #356c94; /* color original */
+  background: #fff;
+  outline: none;
+  box-shadow: 0 0 5px #356c94aa;
+}
+
+/* Tabla */
 .tabla-cortes {
-  overflow-x: auto;
-}
-
-table {
   width: 100%;
-  border-collapse: collapse;
-  background: white;
+  border-collapse: separate;
+  border-spacing: 0 10px;
+  font-size: 0.95rem;
+  min-width: 720px;
 }
 
-th,
-td {
-  padding: 0.75rem;
-  border: 1px solid #ddd;
+.tabla-cortes thead tr th {
+  background-color: #356c94; /* color original */
+  color: #fff;
+  font-weight: 600;
+  padding: 0.8rem 1rem;
   text-align: center;
+  border: none;
+  user-select: none;
 }
 
-th {
-  background: #00796b;
-  color: white;
+.tabla-cortes tbody tr {
+  background: #fcfcfc; /* color original */
+  transition: background-color 0.3s ease;
+  border-radius: 8px;
+}
+
+.tabla-cortes tbody tr:hover {
+  background-color: #d4e3f5; /* un azul claro para hover */
+  cursor: pointer;
+}
+
+.tabla-cortes tbody tr td {
+  padding: 0.7rem 1rem;
+  border: none;
+  text-align: center;
+  color: #33475b;
+  font-weight: 500;
+}
+
+.tabla-cortes tbody tr td strong {
+  color: #244a75;
+}
+
+/* Mensaje vacío */
+.mensaje-vacio {
+  margin-top: 2rem;
+  color: #6b7280;
+  font-style: italic;
+  text-align: center;
+  font-weight: 500;
+  user-select: none;
+}
+
+/* Scroll horizontal para contenedor */
+.corte-caja::-webkit-scrollbar {
+  height: 8px;
+}
+
+.corte-caja::-webkit-scrollbar-thumb {
+  background: #356c94; /* color original */
+  border-radius: 20px;
+}
+
+.corte-caja::-webkit-scrollbar-track {
+  background: #e4ebf3; /* un gris muy claro */
+  border-radius: 20px;
 }
 </style>

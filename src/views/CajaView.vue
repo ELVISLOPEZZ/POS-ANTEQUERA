@@ -2,19 +2,27 @@
     <div class="caja-view">
       <h1 class="titulo">🪙Caja de Cobro</h1>
 
-      <div v-if="mostrarModalCambio" class="modal-overlay">
+<div v-if="mostrarModalCambio" class="modal-overlay">
   <div class="modal-contenido">
     <h3>🪙 Ingresar cambio inicial en caja</h3>
+    
     <input
       v-model.number="cambioInicial"
       type="number"
-      placeholder="Ej. 500"
+      min="1"
+      step="0.01"
+      placeholder="Ej. 500.00"
+      class="input-cambio"
     />
+
     <div class="modal-botones">
-      <button class="btn-confirmar" @click="guardarCambioInicial">Guardar</button>
+      <button class="btn-confirmar" @click="guardarCambioInicial">
+        Guardar
+      </button>
     </div>
   </div>
 </div>
+
 
       <!-- ALERTA GENERAL -->
       <div v-if="alerta.visible" :class="['alerta-general', alerta.tipo]">
@@ -112,7 +120,7 @@
           </li>
         </ul>
 
-        <p class="total">Total de ventas: ${{ total.toFixed(2) }}</p>
+        <p class="total">Total de la venta: ${{ total.toFixed(2) }}</p>
 
         <div class="metodo-pago">
           <label>Método de pago:</label>
@@ -150,9 +158,15 @@
           <button class="btn-crear" @click="guardarCredito">Otorgar crédito</button>
         </div>
 
-        <div v-if="totalAcumulado > 0" class="recuadro-total-acumulado">
-          <p><strong>Total acumulado del día:</strong> ${{ totalAcumulado.toFixed(2) }}</p>
-        </div>
+<div v-if="totalAcumulado > 0" class="recuadro-total-acumulado">
+  <p><strong>Ventas totales del día:</strong> ${{ totalAcumulado.toFixed(2) }}</p>
+
+
+<div class="dinero-total">
+  <strong> Dinero en caja:</strong> ${{ dineroEnCajaTotal.toFixed(2) }}
+</div>
+
+</div>
 
         <button
           @click="finalizarVenta"
@@ -185,10 +199,12 @@ import { obtenerProductosPorSucursal, actualizarProductosPorSucursal } from '../
 
 export default {
   data() {
-    return {
-      sucursal: localStorage.getItem('store_code') || 'sin_sucursal',
+        return {
+      sucursal: JSON.parse(localStorage.getItem('usuario'))?.sucursal || 'sin_sucursal',
+          cambioInicial: 0, // ✅ Esto evita el warning
       mostrarModalCambio: false,
-      cambioInicial: 0,
+      dineroInicial: 0, // dinero con que inicia la caja
+      rol: '',
       productos: [],
       carrito: [],
       codigoEscaneado: '',
@@ -197,17 +213,17 @@ export default {
       carritoAnterior: [],
       metodoPagoAnterior: '',
       totalAnterior: 0,
-      totalAcumulado: 0,
+      totalAcumulado: 0, // ventas del día
       ventasRealizadas: [],
       inputActivo: false,
       busquedaProducto: '',
       productoNoEncontrado: false,
       modalVisible: false,
       itemAEliminar: null,
+          corteEnProceso: false,
       nuevoCreditoCaja: {
-      nombre: '',
-      descripcion: '',
-      mostrarModalCambio: false,
+        nombre: '',
+        descripcion: '',
       },
       alerta: {
         visible: false,
@@ -216,7 +232,8 @@ export default {
       }
     };
   },
-  computed: {
+
+    computed: {
     total() {
       return this.carrito.reduce((suma, item) => suma + item.precio * item.cantidad, 0);
     },
@@ -224,68 +241,80 @@ export default {
       if (!this.busquedaProducto) return [];
       const texto = this.busquedaProducto.toLowerCase();
       return this.productos.filter(p => p.nombre.toLowerCase().includes(texto));
+    },
+  dineroEnCajaTotal() {
+    return this.dineroInicial + this.totalAcumulado;
+  },
+  },
+
+mounted() {
+  const usuario = JSON.parse(localStorage.getItem('usuario')) || {};
+  this.rol = usuario.rol || 'cajero';
+
+  this.cargarProductos();
+
+  const claveCambio = `cambioInicial_${this.sucursal}`;
+  const cambioGuardado = localStorage.getItem(claveCambio);
+
+  if (this.rol.toLowerCase() !== 'admin') {
+    if (!cambioGuardado || isNaN(parseFloat(cambioGuardado))) {
+      this.mostrarModalCambio = true;
+      this.totalAcumulado = 0;
+      this.dineroInicial = 0;
+    } else {
+      this.dineroInicial = parseFloat(cambioGuardado);
+
+      const claveTotal = `total_acumulado_${this.sucursal}_${new Date().toISOString().slice(0, 10)}`;
+      const totalGuardado = localStorage.getItem(claveTotal);
+      if (totalGuardado) {
+        this.totalAcumulado = parseFloat(totalGuardado);
+      } else {
+        this.totalAcumulado = 0;
+      }
     }
-  },
-  mounted() {
-    const sucursal = this.sucursal;
-    if (!sucursal) return alert('Error: No se pudo determinar la sucursal.');
+  }
 
-    this.productos = obtenerProductosPorSucursal(sucursal);
-    this.cargarTotalDelDia();
+},
 
-    const hoy = new Date().toISOString().slice(0, 10);
-    const claveTotal = `total_acumulado_${sucursal}_${hoy}`;
-    this.totalAcumulado = parseFloat(localStorage.getItem(claveTotal)) || 0;
 
-    // ✅ DINERO EN CAJA POR SUCURSAL
-    const claveDinero = `dinero_en_caja_${sucursal}`;
-    if (!localStorage.getItem(claveDinero)) {
-      localStorage.setItem(claveDinero, this.totalAcumulado.toFixed(2));
-    }
-
-    const todasVentas = JSON.parse(localStorage.getItem('ventas_realizadas')) || [];
-    this.ventasRealizadas = todasVentas.filter(v => v.sucursal === sucursal);
-
-    this.$nextTick(() => this.$refs.inputCodigo?.focus());
-    window.addEventListener('keydown', this.detectarEscape);
-
-    const claveCambio = `cambio_caja_${this.sucursal}_${new Date().toISOString().slice(0, 10)}`;
-if (!localStorage.getItem(claveCambio)) {
-  this.mostrarModalCambio = true;
-}
-
-  },
-  beforeUnmount() {
-    window.removeEventListener('keydown', this.detectarEscape);
-  },
   methods: {
-    guardarCambioInicial() {
-  if (this.cambioInicial <= 0) {
-    alert('Ingresa un monto válido para el cambio en caja.');
+    cargarProductos() {
+      const productos = obtenerProductosPorSucursal(this.sucursal);
+      this.productos = productos || [];
+    },
+
+guardarCambioInicial() {
+  if (!this.cambioInicial || this.cambioInicial <= 0) {
+    alert('Ingresa un valor válido para el cambio inicial');
     return;
   }
 
-  const claveCambio = `cambio_caja_${this.sucursal}_${new Date().toISOString().slice(0, 10)}`;
-  const usuario = JSON.parse(localStorage.getItem('usuario')) || { username: 'desconocido' };
+  this.dineroInicial = this.cambioInicial; // ✅ Asigna el cambio a dineroInicial
 
-  const datosCambio = {
-    monto: this.cambioInicial,
-    usuario: usuario.username,
-    sucursal: this.sucursal,
-    fecha: new Date().toISOString()
+  const fecha = new Date().toLocaleDateString();
+  const horaInicio = new Date().toLocaleTimeString();
+  const usuario = JSON.parse(localStorage.getItem('usuario')) || {};
+  const sucursal = usuario.sucursal || 'sin_sucursal';
+
+  const corte = {
+    fecha,
+    horaInicio,
+    sucursal,
+    usuario: usuario.nombre || 'desconocido',
+    cambio: this.dineroInicial,
+    ventas: [],
+    total: 0,
   };
 
-  localStorage.setItem(claveCambio, JSON.stringify(datosCambio));
+  let cortes = JSON.parse(localStorage.getItem('cortes')) || [];
+  cortes.push(corte);
+  localStorage.setItem('cortes', JSON.stringify(cortes));
 
-  // También lo sumamos a dinero en caja
-  const claveDinero = `dinero_en_caja_${this.sucursal}`;
-  const actual = parseFloat(localStorage.getItem(claveDinero)) || 0;
-  const nuevoTotal = actual + this.cambioInicial;
-  localStorage.setItem(claveDinero, nuevoTotal.toFixed(2));
-  window.dispatchEvent(new Event("dinero-en-caja-actualizado"));
+  localStorage.setItem(`cambioInicial_${sucursal}`, this.dineroInicial);
 
   this.mostrarModalCambio = false;
 },
+
 agregarAlCarrito(producto) {
   if (producto.stock === 0) return alert('Producto sin stock');
   const encontrado = this.carrito.find(p => p.id === producto.id);
@@ -572,38 +601,79 @@ agregarAlCarrito(producto) {
     }, 
     // 🔽 AGREGA ESTA FUNCIÓN AL FINAL DE "methods"
 realizarCorteDeCaja() {
-  const fecha = new Date().toISOString().slice(0, 10);
-  const hora = new Date().toLocaleTimeString();
+  const usuarioData = JSON.parse(localStorage.getItem('usuario')) || {};
+  const ventasGuardadas = JSON.parse(localStorage.getItem('ventas_realizadas')) || [];
+  const cortes = JSON.parse(localStorage.getItem('cortes_realizados')) || [];
 
-  const usuarioActual = JSON.parse(localStorage.getItem('usuario')) || {
-    username: 'desconocido',
-    sucursal: this.sucursal
+  // 🚫 Bloquear si el usuario es admin
+  if (usuarioData.rol === 'admin') {
+    this.mostrarAlerta('⚠️ Los administradores no pueden realizar cortes de caja.', 'error');
+    return;
+  }
+
+  const fechaHoy = new Date().toISOString().slice(0, 10);
+  const usuario = {
+    nombre: usuarioData.nombre || usuarioData.username || 'Desconocido',
+    sucursal: usuarioData.sucursal || this.sucursal
   };
+
+  // 🕒 Último corte timestamp
+  const cortesSucursal = cortes
+    .filter(corte => corte.sucursal === this.sucursal)
+    .sort((a, b) => b.timestamp - a.timestamp);
+  const ultimoCorteTimestamp = cortesSucursal.length > 0 ? cortesSucursal[0].timestamp : 0;
+
+  // ✅ Ventas desde el último corte hasta ahora
+  const ventasNuevas = ventasGuardadas.filter(venta => {
+    return (
+      venta.sucursal === this.sucursal &&
+      new Date(venta.fecha).getTime() > ultimoCorteTimestamp
+    );
+  });
+
+  const totalVentas = ventasNuevas.reduce((acc, venta) => acc + (venta.total || 0), 0);
+
+  const cambioInicialKey = `cambioInicial_${this.sucursal}`;
+  const cambioInicial = Number(localStorage.getItem(cambioInicialKey)) || 0;
+
+  const totalCaja = cambioInicial + totalVentas;
 
   const corte = {
-    timestamp: Date.now(),
-    fecha,
-    hora,
-    total: this.totalAcumulado.toFixed(2),
-    usuario: {
-      nombre: usuarioActual.username,
-      sucursal: this.sucursal
-    }
+    sucursal: this.sucursal,
+    fecha: fechaHoy,
+    hora: new Date().toLocaleTimeString('es-MX'),
+    total: totalCaja,
+    ventas: ventasNuevas,
+    usuario: usuario,
+    cambioInicial: cambioInicial,
+    totalVentas: totalVentas,
+    timestamp: new Date().getTime()
   };
 
-  const cortes = JSON.parse(localStorage.getItem('cortes_caja')) || [];
+  // Guardar corte
   cortes.push(corte);
-  localStorage.setItem('cortes_caja', JSON.stringify(cortes));
+  localStorage.setItem('cortes_realizados', JSON.stringify(cortes));
 
-  // Resetear dinero en caja y total acumulado
-  const claveDinero = `dinero_en_caja_${this.sucursal}`;
-  localStorage.setItem(claveDinero, '0');
+  // Limpiar datos del turno
+  localStorage.removeItem(`total_acumulado_${this.sucursal}_${fechaHoy}`);
+  localStorage.removeItem(`dinero_en_caja_${this.sucursal}`);
+  localStorage.removeItem(`cambioInicial_${this.sucursal}`);
+
+  // Resetear estados
   this.totalAcumulado = 0;
+  this.dineroInicial = 0;
+  this.carrito = [];
+  this.codigoEscaneado = '';
+  this.ventaFinalizada = false;
+  this.metodoPago = 'efectivo';
 
-  // Emitir evento y mostrar confirmación
-  window.dispatchEvent(new Event("dinero-en-caja-actualizado"));
-  this.mostrarAlerta('💸 Corte de caja realizado exitosamente.', 'exito');
+  this.mostrarAlerta('📦 Corte de caja realizado exitosamente.', 'exito');
+
+  // Emitir evento
+  window.dispatchEvent(new Event('corte-realizado'));
 },
+
+
   }
 };
 </script>
@@ -731,6 +801,7 @@ realizarCorteDeCaja() {
   font-size: 0.85rem;
   color: #666;
 }
+
 
 /* ➕ BOTÓN AGREGAR */
 .btn-agregar {
@@ -880,6 +951,11 @@ realizarCorteDeCaja() {
   font-weight: bold;
 }
 
+.dinero-total {
+  color: #005204;
+  font-weight: bold;
+}
+
 /* ❗ ALERTAS */
 .alerta-error {
   text-align: center;
@@ -893,65 +969,6 @@ realizarCorteDeCaja() {
   animation: fadeIn 0.4s ease-out;
 }
 
-/* 🧊 MODAL */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 999;
-  animation: fadeIn 0.3s ease-out;
-}
-
-.modal-contenido {
-  background: #fff;
-  padding: 2rem;
-  border-radius: 10px;
-  text-align: center;
-  width: 90%;
-  max-width: 400px;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.2);
-  transform: scale(0.9);
-  animation: slideIn 0.25s ease-out;
-}
-
-.modal-botones {
-  display: flex;
-  justify-content: space-around;
-  margin-top: 1.5rem;
-}
-
-.btn-confirmar,
-.btn-cancelar {
-  padding: 0.5rem 1rem;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: bold;
-  font-size: 1rem;
-  transition: background-color 0.2s ease;
-}
-
-.btn-confirmar {
-  background-color: #4caf50;
-  color: white;
-}
-.btn-confirmar:hover {
-  background-color: #388e3c;
-}
-
-.btn-cancelar {
-  background-color: #e57373;
-  color: white;
-}
-.btn-cancelar:hover {
-  background-color: #c62828;
-}
 
 /* 🖨 IMPRESIÓN */
 @media print {
@@ -1177,28 +1194,92 @@ realizarCorteDeCaja() {
   background-color: #f44336; /* rojo */
 }
 
+
 .modal-overlay {
   position: fixed;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  background-color: rgba(0,0,0,0.5);
-  display: flex; align-items: center; justify-content: center;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  justify-content: center;
+  align-items: center;
   z-index: 999;
+  animation: fadeIn 0.25s ease-out;
+  backdrop-filter: blur(4px);
 }
 
 .modal-contenido {
-  background: white;
-  padding: 20px;
-  border-radius: 10px;
-  width: 300px;
+  background: #ffffff;
+  padding: 2rem 2.5rem;
+  border-radius: 14px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+  width: 90%;
+  max-width: 360px;
   text-align: center;
+  animation: slideIn 0.3s ease-out;
+  font-family: 'Poppins', sans-serif;
 }
 
-.modal-contenido input {
+.modal-contenido h3 {
+  font-size: 1.4rem;
+  margin-bottom: 1rem;
+  color: #000000;
+}
+
+.modal-contenido input[type="number"] {
   width: 100%;
-  padding: 10px;
-  margin-top: 10px;
-  font-size: 16px;
+  padding: 0.9rem 1rem;
+  font-size: 1.1rem;
+  border: 2px solid #c8e6c9;
+  border-radius: 10px;
+  outline: none;
+  transition: border-color 0.3s;
+  margin-bottom: 1.5rem;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.modal-contenido input[type="number"]:focus {
+  border-color: #000000;
+}
+
+.modal-botones {
+  display: flex;
+  justify-content: center;
+}
+
+.modal-botones .btn-confirmar {
+  background-color: #43a047;
+  color: white;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.25s ease, transform 0.2s ease;
+}
+
+.modal-botones .btn-confirmar:hover {
+  background-color: #388e3c;
+  transform: scale(1.04);
+}
+
+/* Animaciones */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 </style>

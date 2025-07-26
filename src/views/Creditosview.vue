@@ -3,7 +3,7 @@
     <h1>📋 Gestión de Créditos</h1>
 
     <p style="text-align:center; font-weight:600; color:#2e7d32;">
-  💰 Dinero en caja disponible: ${{ formatoMoneda(dineroEnCaja) }}
+  💰 Dinero disponible en caja: ${{ formatoMoneda(dineroEnCaja) }}
 </p>
 
 
@@ -100,6 +100,8 @@
   </div>
 </template>
 
+
+
 <script>
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -119,8 +121,8 @@ export default {
       filtroFechaInicio: "",
       filtroFechaFin: "",
       sucursalActual: localStorage.getItem("store_code") || null,
-      dineroEnCaja: parseFloat(localStorage.getItem(`dinero_en_caja_${localStorage.getItem("store_code")}`)) || 0,
-      pagando: false
+      pagando: false,
+      dineroEnCaja: 0, 
     };
   },
   computed: {
@@ -150,6 +152,15 @@ export default {
     }
   },
   methods: {
+  cargarDineroEnCaja() {
+    const sucursal = localStorage.getItem("store_code") || "sin_sucursal";
+    const hoy = new Date().toISOString().slice(0, 10);
+
+    const cambioInicial = parseFloat(localStorage.getItem(`cambioInicial_${sucursal}`)) || 0;
+    const totalAcumulado = parseFloat(localStorage.getItem(`total_acumulado_${sucursal}_${hoy}`)) || 0;
+
+    this.dineroEnCaja = cambioInicial + totalAcumulado;
+  },
 
     crearCredito() {
   const { nombre, monto, descripcion } = this.nuevoCredito;
@@ -316,7 +327,6 @@ registrarPago(cliente) {
   const historial = localStorage.getItem(historialKey);
   this.clientes = datos ? JSON.parse(datos) : [];
   this.historialFinalizados = historial ? JSON.parse(historial) : [];
-  this.dineroEnCaja = parseFloat(localStorage.getItem(dineroKey)) || 0;
 },
 
 
@@ -340,6 +350,10 @@ registrarPago(cliente) {
     }
   },
 mounted() {
+  this.cargarClientes();            // 🔁 Primero carga todo del localStorage
+  this.cargarDineroEnCaja();       // ✅ Después suma cambioInicial + ventas
+  window.addEventListener("dinero-en-caja-actualizado", this.actualizarDineroCaja);
+
   this.cargarClientes();
   window.addEventListener("dinero-en-caja-actualizado", this.actualizarDineroCaja);
 },
