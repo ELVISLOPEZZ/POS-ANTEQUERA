@@ -1,5 +1,17 @@
 <template>
   <div class="creditos-view">
+
+  <div class="tooltip-container">
+    <span class="tooltip-icon">ℹ️</span>
+    <div class="tooltip-text">
+      Si eres administrador no cobres los créditos, ya que de esto se encargan los cajeros.
+      <br />
+      Si necesitas cobrar un crédito, inicia sesión con perfil de cajero y cobra el crédito.
+      <br />
+      Haslo cuando todos los turnos del día hayan finalizado.
+    </div>
+  </div>
+    
     <h1>📋 Gestión de Créditos</h1>
 
     <p style="text-align:center; font-weight:600; color:#2e7d32;">
@@ -369,6 +381,55 @@ mounted() {
 
 <style scoped>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+.tooltip-container {
+  position: absolute;
+  top: 25px;
+  right: 30px;
+  display: inline-block;
+  z-index: 10;
+}
+
+.creditos-view {
+  position: relative;
+  max-width: 900px;
+  margin: auto;
+  padding: 2rem;
+  font-family: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: #f9f9f9;
+  border-radius: 8px;
+  box-shadow: 0 0 15px rgba(0,0,0,0.1);
+}
+
+
+.tooltip-icon {
+  cursor: pointer;
+  font-size: 22px;
+}
+
+.tooltip-text {
+  width: 360px; /* o ajusta a 340px si lo prefieres */
+  visibility: hidden;
+  background-color: #333;
+  color: #fff;
+  text-align: left;
+  border-radius: 8px;
+  padding: 12px;
+  position: absolute;
+  z-index: 10;
+  top: 30px;
+  right: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow: 0px 2px 10px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+
+.tooltip-container:hover .tooltip-text {
+  visibility: visible;
+  opacity: 1;
+}
 
 .creditos-view {
   max-width: 900px;

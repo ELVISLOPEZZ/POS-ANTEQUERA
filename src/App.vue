@@ -14,7 +14,7 @@
           v-show="menuAbierto || anchoPantalla >= 769"
           class="nav-botones menu-lateral"
         >
-          <button @click="irA('Caja')" :class="{ activo: vista === 'Caja' }">💵 Caja</button>
+          <button v-if="rolUsuario !== 'admin'" @click="irA('Caja')" :class="{ activo: vista === 'Caja' }">💵 Caja</button>
           <button @click="irA('Creditos')" :class="{ activo: vista === 'Creditos' }">🧾 Créditos</button>
           <button @click="irA('Inventario')" :class="{ activo: vista === 'Inventario' }">📦 Inventario</button>
           <button v-if="rolUsuario === 'admin'" @click="irA('Reportes')" :class="{ activo: vista === 'Reportes' }">📊 Reportes</button>
@@ -93,14 +93,38 @@ export default {
     }
   },
   methods: {
-    irA(vista) {
-      this.vista = vista
-      if (this.anchoPantalla < 769) this.menuAbierto = false
-    },
-    agregarVenta(nuevaVenta) {
+irA(vista) {
+  // Si el rol es admin y la vista solicitada es 'Caja', cambiar a 'Reportes'
+  if (this.rolUsuario === 'admin' && vista === 'Caja') {
+    this.vista = 'Reportes';
+    this.$router.push('/reportes');
+  } else {
+    this.vista = vista;
+    if (this.anchoPantalla < 769) this.menuAbierto = false;
+    // También actualiza la ruta según la vista seleccionada
+    switch (this.vista) {
+      case 'Caja':
+        this.$router.push('/caja');
+        break;
+      case 'Reportes':
+        this.$router.push('/reportes');
+        break;
+      case 'Inventario':
+        this.$router.push('/inventario');
+        break;
+      case 'Creditos':
+        this.$router.push('/creditos');
+        break;
+      case 'Administrador':
+        this.$router.push('/administrador');
+        break;
+    }
+  }
+},
+agregarVenta(nuevaVenta) {
       this.ventas.push(nuevaVenta)
       localStorage.setItem('ventas_realizadas', JSON.stringify(this.ventas))
-    },
+},
 cerrarSesion() {
   this.mostrarAlerta = true;
 },
@@ -136,20 +160,31 @@ finalizarCorte() {
   localStorage.removeItem('rol_usuario');
   this.$router.push('/');
 },
-    cancelarCerrarSesion() {
+cancelarCerrarSesion() {
       this.mostrarAlerta = false
-    },
-    onLoginExitoso(usuario) {
-      this.logueado = true
-      this.sucursalActual = localStorage.getItem('store_code') || ''
-      this.rolUsuario = usuario.rol || ''
-      this.vista = 'Caja'
-      this.$router.push('/caja')
-    },
-    actualizarAnchoPantalla() {
+},
+onLoginExitoso(usuario) {
+  this.logueado = true
+  this.sucursalActual = localStorage.getItem('store_code') || ''
+  this.rolUsuario = usuario.rol || ''
+
+  if (this.rolUsuario === 'admin') {
+    this.vista = 'Reportes'
+    this.$router.push('/reportes')
+  } else {
+    this.vista = 'Caja'
+    this.$router.push('/caja')
+  }
+
+  // Aquí puedes usar nextTick para asegurarte que la vista ya se actualizó
+  this.$nextTick(() => {
+    // Si necesitas que algún componente haga algo tras la vista cargada
+  })
+},
+actualizarAnchoPantalla() {
       this.anchoPantalla = window.innerWidth
       if (this.anchoPantalla >= 769) this.menuAbierto = false
-    }
+}
   },
   created() {
     this.logueado = isLoggedIn()
@@ -163,10 +198,34 @@ finalizarCorte() {
   unmounted() {
     window.removeEventListener('resize', this.actualizarAnchoPantalla)
   },
-  mounted() {
+mounted() {
   this.rolUsuario = localStorage.getItem('rol_usuario') || '';
-}
 
+  // Si es admin y la vista actual es 'Caja', redirigir a 'Reportes'
+  if (this.rolUsuario === 'admin' && this.vista === 'Caja') {
+    this.vista = 'Reportes';
+    this.$router.push('/reportes');
+  } else {
+    // Para que al recargar se mantenga la ruta acorde a la vista
+    switch (this.vista) {
+      case 'Caja':
+        this.$router.push('/caja');
+        break;
+      case 'Reportes':
+        this.$router.push('/reportes');
+        break;
+      case 'Inventario':
+        this.$router.push('/inventario');
+        break;
+      case 'Creditos':
+        this.$router.push('/creditos');
+        break;
+      case 'Administrador':
+        this.$router.push('/administrador');
+        break;
+    }
+  }
+},
 }
 </script>
 

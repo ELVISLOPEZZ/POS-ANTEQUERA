@@ -387,36 +387,27 @@ eliminarCategoria() {
     },
 guardarCambios() {
   const codigo = this.formulario.codigoBarras?.toString().trim() || ''
+const rol = localStorage.getItem('rol_usuario') || 'cajero'
 
   if (!/^\d{1,13}$/.test(codigo)) {
     this.tipoMensaje = 'error'
     this.mensajeEmergente = '❌ El código de barras debe tener solo números y máximo 13 dígitos.'
-    setTimeout(() => {
-      this.mensajeEmergente = ''
-      this.tipoMensaje = ''
-    }, 4000)
+    setTimeout(() => (this.mensajeEmergente = ''), 4000)
     return
   }
 
   let todosLosProductos = JSON.parse(localStorage.getItem('productos')) || []
   const esNuevo = this.productoSeleccionado === null
-
-  // ✅ Filtramos los productos SOLO de esta sucursal
   const productosSucursal = todosLosProductos.filter(p => p.sucursal === this.sucursal)
 
-  // ✅ Verificamos si ya existe un producto con el mismo código en esta sucursal
   const yaExiste = productosSucursal.some(p =>
-    p.codigoBarras === codigo &&
-    (esNuevo || p.id !== this.productoSeleccionado)
+    p.codigoBarras === codigo && (esNuevo || p.id !== this.productoSeleccionado)
   )
 
   if (yaExiste) {
     this.tipoMensaje = 'error'
     this.mensajeEmergente = `❌ Ya existe un producto con ese código de barras en la sucursal "${this.sucursal}".`
-    setTimeout(() => {
-      this.mensajeEmergente = ''
-      this.tipoMensaje = ''
-    }, 4000)
+    setTimeout(() => (this.mensajeEmergente = ''), 4000)
     return
   }
 
@@ -428,9 +419,21 @@ guardarCambios() {
       sucursal: this.sucursal
     }
     todosLosProductos.push(nuevoProducto)
+
   } else {
     const index = todosLosProductos.findIndex(p => p.id === this.productoSeleccionado)
     if (index !== -1) {
+      const productoOriginal = todosLosProductos[index]
+      const stockNuevo = this.formulario.stock
+
+      // ✅ Solo bloquear reducción de stock si el usuario NO es admin
+      if (rol !== 'admin' && stockNuevo < productoOriginal.stock) {
+        this.tipoMensaje = 'error'
+        this.mensajeEmergente = '⚠️ No puedes reducir el stock. Solo está permitido aumentarlo.'
+        setTimeout(() => (this.mensajeEmergente = ''), 4000)
+        return
+      }
+
       todosLosProductos[index] = {
         id: this.productoSeleccionado,
         ...this.formulario,

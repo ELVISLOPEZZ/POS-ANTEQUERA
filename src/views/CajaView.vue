@@ -168,14 +168,60 @@
 
 </div>
 
-        <button
-          @click="finalizarVenta"
-          :disabled="carrito.length === 0 || metodoPago === 'credito'"
-          class="btn-finalizar"
-        >
+        <button @click="mostrarModalDePago" :disabled="carrito.length === 0 || metodoPago === 'credito'" class="btn-finalizar">
           Finalizar Venta
         </button>
       </section>
+
+  <!-- Modal de Pago -->
+  <div
+    v-if="mostrarModalPago"
+    class="modal-overlay"
+    @keydown.esc="cancelarPago"
+    tabindex="0"
+    ref="modalPago"
+  >
+    <div class="modal-contenido" role="dialog" aria-modal="true" aria-labelledby="tituloModalPago">
+      <h3 id="tituloModalPago">Confirmar Pago💵</h3>
+
+      <p>Total a pagar: <strong>${{ total.toFixed(2) }}</strong></p>
+
+      <label for="montoRecibido">Monto recibido</label>
+      <input
+        id="montoRecibido"
+        type="number"
+        min="0"
+        step="0.01"
+        v-model.number="montoRecibido"
+        @input="calcularCambio"
+        placeholder="Ingresa el monto recibido"
+        autofocus
+      />
+
+      <p v-if="cambio >= 0">Cambio: <strong>${{ cambio.toFixed(2) }}</strong></p>
+      <p v-else class="alerta-error">Monto recibido insuficiente</p>
+
+      <div class="modal-botones">
+        <button
+          class="btn-confirmar"
+          :disabled="montoRecibido < total"
+          @click="confirmarPago"
+          title="Confirmar el pago"
+        >
+          Confirmar
+        </button>
+
+        <button
+          class="btn-cancelar"
+          @click="cancelarPago"
+          title="Cancelar"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  </div>
+
 
       <!-- Ticket -->
       <section v-if="ventaFinalizada" class="ticket" id="ticket">
@@ -201,6 +247,9 @@ export default {
   data() {
         return {
       sucursal: JSON.parse(localStorage.getItem('usuario'))?.sucursal || 'sin_sucursal',
+      mostrarModalPago: false,
+montoRecibido: 0,
+cambio: 0,
           cambioInicial: 0, // ✅ Esto evita el warning
       mostrarModalCambio: false,
       dineroInicial: 0, // dinero con que inicia la caja
@@ -533,6 +582,29 @@ agregarAlCarrito(producto) {
       this.totalAcumulado = nuevoTotal;
     },
 
+mostrarModalDePago() {
+  this.mostrarModalPago = true;
+  this.montoRecibido = 0;
+  this.cambio = 0;
+},
+
+calcularCambio() {
+  if (this.montoRecibido >= this.total) {
+    this.cambio = this.montoRecibido - this.total;
+  } else {
+    this.cambio = 0;
+  }
+},
+
+confirmarPago() {
+this.finalizarVenta();
+  this.mostrarModalPago = false;
+},
+
+cancelarPago() {
+  this.mostrarModalPago = false;
+},
+
     imprimirTicket() {
       const ticketContent = `
         <div style="text-align: left; font-size: 12px; font-family: monospace;">
@@ -605,25 +677,31 @@ realizarCorteDeCaja() {
   const ventasGuardadas = JSON.parse(localStorage.getItem('ventas_realizadas')) || [];
   const cortes = JSON.parse(localStorage.getItem('cortes_realizados')) || [];
 
-  // 🚫 Bloquear si el usuario es admin
   if (usuarioData.rol === 'admin') {
     this.mostrarAlerta('⚠️ Los administradores no pueden realizar cortes de caja.', 'error');
     return;
   }
 
-  const fechaHoy = new Date().toISOString().slice(0, 10);
+  // ✅ Fecha local en México en formato YYYY-MM-DD
+  const fechaHoy = new Date().toLocaleDateString('es-MX', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).split('/').reverse().join('-');
+
+  const horaActual = new Date().toLocaleTimeString('es-MX');
+
   const usuario = {
     nombre: usuarioData.nombre || usuarioData.username || 'Desconocido',
     sucursal: usuarioData.sucursal || this.sucursal
   };
 
-  // 🕒 Último corte timestamp
   const cortesSucursal = cortes
     .filter(corte => corte.sucursal === this.sucursal)
     .sort((a, b) => b.timestamp - a.timestamp);
+
   const ultimoCorteTimestamp = cortesSucursal.length > 0 ? cortesSucursal[0].timestamp : 0;
 
-  // ✅ Ventas desde el último corte hasta ahora
   const ventasNuevas = ventasGuardadas.filter(venta => {
     return (
       venta.sucursal === this.sucursal &&
@@ -641,25 +719,22 @@ realizarCorteDeCaja() {
   const corte = {
     sucursal: this.sucursal,
     fecha: fechaHoy,
-    hora: new Date().toLocaleTimeString('es-MX'),
+    hora: horaActual,
     total: totalCaja,
     ventas: ventasNuevas,
     usuario: usuario,
     cambioInicial: cambioInicial,
     totalVentas: totalVentas,
-    timestamp: new Date().getTime()
+    timestamp: Date.now()
   };
 
-  // Guardar corte
   cortes.push(corte);
   localStorage.setItem('cortes_realizados', JSON.stringify(cortes));
 
-  // Limpiar datos del turno
   localStorage.removeItem(`total_acumulado_${this.sucursal}_${fechaHoy}`);
   localStorage.removeItem(`dinero_en_caja_${this.sucursal}`);
   localStorage.removeItem(`cambioInicial_${this.sucursal}`);
 
-  // Resetear estados
   this.totalAcumulado = 0;
   this.dineroInicial = 0;
   this.carrito = [];
@@ -668,10 +743,9 @@ realizarCorteDeCaja() {
   this.metodoPago = 'efectivo';
 
   this.mostrarAlerta('📦 Corte de caja realizado exitosamente.', 'exito');
-
-  // Emitir evento
   window.dispatchEvent(new Event('corte-realizado'));
-},
+}
+
 
 
   }
@@ -680,6 +754,117 @@ realizarCorteDeCaja() {
 
 
 <style scoped>
+/* Estilos del modal de cobro*/
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+  animation: fadeIn 0.25s ease-out;
+  backdrop-filter: blur(4px);
+}
+
+.modal-contenido {
+  background: #ffffff;
+  padding: 2rem 2.5rem;
+  border-radius: 14px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+  width: 90%;
+  max-width: 360px;
+  text-align: center;
+  animation: slideIn 0.3s ease-out;
+  font-family: 'Poppins', sans-serif;
+}
+
+.modal-contenido h3 {
+  font-size: 1.4rem;
+  margin-bottom: 1rem;
+  color: #000000;
+}
+
+.modal-contenido input[type="number"] {
+  width: 100%;
+  padding: 0.9rem 1rem;
+  font-size: 1.1rem;
+  border: 2px solid #c8e6c9;
+  border-radius: 10px;
+  outline: none;
+  transition: border-color 0.3s;
+  margin-bottom: 1.5rem;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.modal-contenido input[type="number"]:focus {
+  border-color: #000000;
+}
+
+.modal-botones {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.btn-confirmar {
+  background-color: #43a047;
+  color: white;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.25s ease, transform 0.2s ease;
+}
+
+.btn-confirmar:hover:not(:disabled) {
+  background-color: #388e3c;
+  transform: scale(1.04);
+}
+
+.btn-confirmar:disabled {
+  background-color: #a5d6a7;
+  cursor: not-allowed;
+}
+
+.btn-cancelar {
+  background-color: #e74c3c;
+  color: white;
+  border-radius: 8px;
+  padding: 0.75rem 1.5rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.btn-cancelar:hover {
+  background-color: #c62828;
+}
+
+/* Animaciones */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+
 /* 🎨 TIPOGRAFÍA Y TÍTULOS */
 .caja-view {
   max-width: 900px;
@@ -952,7 +1137,7 @@ realizarCorteDeCaja() {
 }
 
 .dinero-total {
-  color: #005204;
+  color: #004404;
   font-weight: bold;
 }
 
