@@ -239,18 +239,17 @@
     </div>
   </template>
 
--------------------------------------------------------Scryp funcional----------------------------------------------------------------------
-<script>
-import { obtenerProductosPorSucursal, actualizarProductosPorSucursal } from '../productos.js';
 
+<script>
+import { obtenerProductos, actualizarProducto } from '../services/inventario.service.js';
 export default {
   data() {
         return {
       sucursal: JSON.parse(localStorage.getItem('usuario'))?.sucursal || 'sin_sucursal',
       mostrarModalPago: false,
-montoRecibido: 0,
-cambio: 0,
-          cambioInicial: 0, // ✅ Esto evita el warning
+      montoRecibido: 0,
+      cambio: 0,
+      cambioInicial: 0, // ✅ Esto evita el warning
       mostrarModalCambio: false,
       dineroInicial: 0, // dinero con que inicia la caja
       rol: '',
@@ -282,6 +281,7 @@ cambio: 0,
     };
   },
 
+
     computed: {
     total() {
       return this.carrito.reduce((suma, item) => suma + item.precio * item.cantidad, 0);
@@ -294,9 +294,10 @@ cambio: 0,
   dineroEnCajaTotal() {
     return this.dineroInicial + this.totalAcumulado;
   },
-  },
+    },
 
-mounted() {
+
+    mounted() {
   const usuario = JSON.parse(localStorage.getItem('usuario')) || {};
   this.rol = usuario.rol || 'cajero';
 
@@ -323,16 +324,20 @@ mounted() {
     }
   }
 
-},
-
-
-  methods: {
-    cargarProductos() {
-      const productos = obtenerProductosPorSucursal(this.sucursal);
-      this.productos = productos || [];
     },
 
-guardarCambioInicial() {
+
+    methods: {
+    async cargarProductos() {
+  try {
+    const productos = await obtenerProductos();
+    this.productos = productos.filter(p => p.sucursal === this.sucursal);
+  } catch (error) {
+    console.error('Error al cargar productos:', error);
+    this.mostrarAlerta('❌ Error al obtener productos del servidor.', 'error');
+  }
+    },
+    guardarCambioInicial() {
   if (!this.cambioInicial || this.cambioInicial <= 0) {
     alert('Ingresa un valor válido para el cambio inicial');
     return;
@@ -362,9 +367,8 @@ guardarCambioInicial() {
   localStorage.setItem(`cambioInicial_${sucursal}`, this.dineroInicial);
 
   this.mostrarModalCambio = false;
-},
-
-agregarAlCarrito(producto) {
+    },
+    agregarAlCarrito(producto) {
   if (producto.stock === 0) return alert('Producto sin stock');
   const encontrado = this.carrito.find(p => p.id === producto.id);
   if (encontrado) {
@@ -381,7 +385,7 @@ agregarAlCarrito(producto) {
 
   // ✅ Opcional: reenfocar input de código de barras
   this.$nextTick(() => this.$refs.inputCodigo?.focus());
-},
+    },
     cambiarCantidad(item, delta) {
       const nuevaCantidad = item.cantidad + delta;
       if (nuevaCantidad < 1) return this.mostrarModal(item);
@@ -413,7 +417,6 @@ agregarAlCarrito(producto) {
       this.agregarAlCarrito(producto);
       this.codigoEscaneado = '';
     },
-
     guardarCredito() {
       if (!this.nuevoCreditoCaja.nombre.trim()) {
         this.mostrarAlerta('⚠️ Ingresa el nombre del cliente.', 'error');
@@ -492,7 +495,6 @@ agregarAlCarrito(producto) {
 
       this.mostrarAlerta('✔️ Crédito guardado sin afectar caja.', 'exito');
     },
-
     cargarTotalDelDia() {
       const hoy = new Date().toISOString().slice(0, 10);
       const sucursal = this.sucursal;
@@ -501,7 +503,7 @@ agregarAlCarrito(producto) {
       const todasVentas = JSON.parse(localStorage.getItem('ventas_realizadas') || '[]');
       const ventasHoy = todasVentas.filter(v =>
         v.sucursal === sucursal &&
-        v.fecha?.startsWith(hoy) &&
+        new Date(v.fecha).toISOString().slice(0, 10) === hoy &&
         v.metodoPago !== 'credito'
       );
       ventasHoy.forEach(v => total += v.total);
@@ -519,60 +521,85 @@ agregarAlCarrito(producto) {
       const claveTotal = `total_acumulado_${sucursal}_${hoy}`;
       localStorage.setItem(claveTotal, total.toString());
     },
+    async finalizarVenta() {
+  if (this.metodoPago === 'credito') {
+    alert('Para ventas a crédito, usa el botón "Otorgar crédito".');
+    return;
+  }
 
-    finalizarVenta() {
-      if (this.metodoPago === 'credito') {
-        alert('Para ventas a crédito, usa el botón "Otorgar crédito".');
-        return;
-      }
+  // Actualizar el stock localmente restando las cantidades vendidas
+  this.carrito.forEach(item => {
+    const prod = this.productos.find(p => p.id === item.id);
+    if (prod) {
+      prod.stock -= item.cantidad;
+      if (prod.stock < 0) prod.stock = 0; // Evitar stock negativo
+    }
+  });
 
-      this.carrito.forEach(item => {
-        const prod = this.productos.find(p => p.id === item.id);
-        if (prod) prod.stock -= item.cantidad;
-      });
+  // Actualizar el stock en backend para cada producto
+  try {
+    await Promise.all(
+      this.productos.map(producto => {
+        if (typeof producto.stock === 'number') {
+          return actualizarProducto(producto.id, { stock: producto.stock });
+        }
+        return Promise.resolve();
+      })
+    );
+  } catch (error) {
+    console.error('Error actualizando stock en backend:', error);
+    this.mostrarAlerta('❌ Error actualizando stock en el servidor.', 'error');
+    return;
+  }
 
-      actualizarProductosPorSucursal(this.sucursal, this.productos);
+  // Obtener usuario actual para registrar la venta
+  const usuarioActual = JSON.parse(localStorage.getItem('usuario')) || {
+    username: 'desconocido',
+    sucursal: 'sin_sucursal'
+  };
 
-      const usuarioActual = JSON.parse(localStorage.getItem('usuario')) || {
-        username: 'desconocido',
-        sucursal: 'sin_sucursal'
-      };
-
-      const venta = {
-        id: Date.now(),
-        productos: JSON.parse(JSON.stringify(this.carrito)),
-        total: this.total,
-        metodoPago: this.metodoPago,
-        fecha: new Date().toISOString(),
-        usuario: {
-          nombre: usuarioActual.username,
-          sucursal: this.sucursal
-        },
-        sucursal: this.sucursal
-      };
-
-      const todasVentas = JSON.parse(localStorage.getItem('ventas_realizadas')) || [];
-      todasVentas.push(venta);
-      localStorage.setItem('ventas_realizadas', JSON.stringify(todasVentas));
-
-      this.sumarAlTotalDelDia(this.total);
-
-      // ✅ Actualizar dinero en caja por sucursal
-      const claveDinero = `dinero_en_caja_${this.sucursal}`;
-      const dineroActual = parseFloat(localStorage.getItem(claveDinero)) || 0;
-      const nuevoDinero = dineroActual + this.total;
-      localStorage.setItem(claveDinero, nuevoDinero.toFixed(2));
-      window.dispatchEvent(new Event("dinero-en-caja-actualizado"));
-
-      this.$emit('nueva-venta', venta);
-      this.carritoAnterior = [...this.carrito];
-      this.totalAnterior = this.total;
-      this.metodoPagoAnterior = this.metodoPago;
-      this.ventaFinalizada = true;
-      this.carrito = [];
-      this.codigoEscaneado = '';
+  // Crear objeto venta con detalles
+  const venta = {
+    id: Date.now(),
+    productos: JSON.parse(JSON.stringify(this.carrito)),
+    total: this.total,
+    metodoPago: this.metodoPago,
+    fecha: new Date().toISOString(),
+    usuario: {
+      nombre: usuarioActual.username,
+      sucursal: this.sucursal
     },
+    sucursal: this.sucursal
+  };
 
+  // Guardar venta en localStorage (o backend si aplicas)
+  const todasVentas = JSON.parse(localStorage.getItem('ventas_realizadas')) || [];
+  todasVentas.push(venta);
+  localStorage.setItem('ventas_realizadas', JSON.stringify(todasVentas));
+
+  // Sumar al total acumulado diario
+  this.sumarAlTotalDelDia(this.total);
+
+  // Actualizar dinero en caja por sucursal
+  const claveDinero = `dinero_en_caja_${this.sucursal}`;
+  const dineroActual = parseFloat(localStorage.getItem(claveDinero)) || 0;
+  const nuevoDinero = dineroActual + this.total;
+  localStorage.setItem(claveDinero, nuevoDinero.toFixed(2));
+  window.dispatchEvent(new Event("dinero-en-caja-actualizado"));
+
+  // Emitir evento para actualizar reportes u otras vistas
+  this.$emit('nueva-venta', venta);
+
+  // Guardar estado para impresión o referencia
+  this.carritoAnterior = [...this.carrito];
+  this.totalAnterior = this.total;
+  this.metodoPagoAnterior = this.metodoPago;
+
+  // Marcar venta como finalizada y limpiar carrito
+  this.ventaFinalizada = true;
+  this.carrito = [];
+  this.codigoEscaneado = '';
+    },
     sumarAlTotalDelDia(monto) {
       const hoy = new Date().toISOString().slice(0, 10);
       const claveTotal = `total_acumulado_${this.sucursal}_${hoy}`;
@@ -581,30 +608,25 @@ agregarAlCarrito(producto) {
       localStorage.setItem(claveTotal, nuevoTotal.toString());
       this.totalAcumulado = nuevoTotal;
     },
-
-mostrarModalDePago() {
+    mostrarModalDePago() {
   this.mostrarModalPago = true;
   this.montoRecibido = 0;
   this.cambio = 0;
-},
-
-calcularCambio() {
+    },
+    calcularCambio() {
   if (this.montoRecibido >= this.total) {
     this.cambio = this.montoRecibido - this.total;
   } else {
     this.cambio = 0;
   }
-},
-
-confirmarPago() {
+    },
+    confirmarPago() {
 this.finalizarVenta();
   this.mostrarModalPago = false;
-},
-
-cancelarPago() {
+    },
+    cancelarPago() {
   this.mostrarModalPago = false;
-},
-
+    },
     imprimirTicket() {
       const ticketContent = `
         <div style="text-align: left; font-size: 12px; font-family: monospace;">
@@ -648,7 +670,6 @@ cancelarPago() {
       }
       this.ventaFinalizada = false;
     },
-
     reenfocarInput() {
       setTimeout(() => {
         if (!this.inputActivo) {
@@ -656,13 +677,11 @@ cancelarPago() {
         }
       }, 100);
     },
-
     detectarEscape(event) {
       if (event.key === 'Escape') {
         this.reenfocarInput();
       }
     },
-
     mostrarAlerta(mensaje, tipo = 'exito') {
       this.alerta.mensaje = mensaje;
       this.alerta.tipo = tipo;
@@ -671,8 +690,7 @@ cancelarPago() {
         this.alerta.visible = false;
       }, 3000);
     }, 
-    // 🔽 AGREGA ESTA FUNCIÓN AL FINAL DE "methods"
-realizarCorteDeCaja() {
+    realizarCorteDeCaja() {
   const usuarioData = JSON.parse(localStorage.getItem('usuario')) || {};
   const ventasGuardadas = JSON.parse(localStorage.getItem('ventas_realizadas')) || [];
   const cortes = JSON.parse(localStorage.getItem('cortes_realizados')) || [];
@@ -744,10 +762,7 @@ realizarCorteDeCaja() {
 
   this.mostrarAlerta('📦 Corte de caja realizado exitosamente.', 'exito');
   window.dispatchEvent(new Event('corte-realizado'));
-}
-
-
-
+    }
   }
 };
 </script>

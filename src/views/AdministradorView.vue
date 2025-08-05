@@ -18,20 +18,27 @@
         <label>Rol:</label>
         <select v-model="nuevoUsuario.rol" required>
           <option disabled value="">-- Selecciona un rol --</option>
-          <option value="admin">Administrador</option>
+          <option value="administrador">Administrador</option>
           <option value="cajero">Cajero</option>
         </select>
       </div>
 
-      <div class="campo">
-        <label>Sucursal:</label>
-        <select v-model="nuevoUsuario.sucursal" required>
-          <option disabled value="">-- Selecciona una sucursal --</option>
-          <option value="SUCURSAL1">Sucursal 1</option>
-          <option value="SUCURSAL2">Sucursal 2</option>
-          <option value="SUCURSAL3">Sucursal 3</option>
-        </select>
-      </div>
+<!-- Cambia el campo Sucursal por ID numérico -->
+<div class="campo">
+  <label>Sucursal:</label>
+  <select v-model.number="nuevoUsuario.sucursal_id" required>
+    <option disabled value="">-- Selecciona una sucursal --</option>
+    <option
+      v-for="sucursal in sucursales"
+      :key="sucursal.id"
+      :value="sucursal.id"
+    >
+      {{ sucursal.nombre }}
+    </option>
+  </select>
+</div>
+
+
 
       <button type="submit" class="btn-guardar">
         {{ modoEdicion ? 'Actualizar Usuario' : 'Guardar Usuario' }}
@@ -52,16 +59,17 @@
         </tr>
       </thead>
       <tbody>
-        <tr v-for="(user, index) in usuarios" :key="index">
-          <td>{{ user.username }}</td>
-          <td>{{ user.password }}</td>
-          <td>{{ user.rol }}</td>
-          <td>{{ user.sucursal }}</td>
-          <td class="acciones">
-            <button class="btn-eliminar" @click="confirmarEliminacion(index)">Eliminar</button>
-            <button class="btn-editar" @click="editarUsuario(index)">Editar</button>
-          </td>
-        </tr>
+<tr v-for="(user, index) in usuarios" :key="index">
+  <td>{{ user.username }}</td>
+  <td>{{ user.password }}contraseña oculta</td>
+  <td>{{ user.rol }}</td>
+    <td>{{ obtenerNombreSucursal(user.sucursal_id) }}</td>
+  <td class="acciones">
+    <button class="btn-eliminar" @click="confirmarEliminacion(user)">🗑️ Eliminar</button>
+    <button class="btn-editar" @click="editarUsuario(user)">✍🏼 Editar</button>
+  </td>
+</tr>
+
       </tbody>
     </table>
 
@@ -79,7 +87,8 @@
 </template>
 
 <script>
-import { usuarios as usuariosBase } from '../auth.js'
+import { obtenerSucursales } from '@/services/sucursal.service.js';
+import {obtenerUsuarios, registrarUsuario, actualizarUsuario, eliminarUsuario} from '@/services/usuario.service.js';
 
 export default {
   data() {
@@ -88,89 +97,117 @@ export default {
         username: '',
         password: '',
         rol: '',
-        sucursal: ''
+        sucursal_id: null,
       },
+      sucursales: [],
       usuarios: [],
       mensaje: '',
       modoEdicion: false,
       indiceEdicion: null,
       modalActivo: false,
-      usuarioAEliminarIndex: null
+      usuarioAEliminar: null
     }
   },
-  mounted() {
-    this.cargarUsuarios()
-  },
+
+    async mounted() {
+  await this.cargarUsuarios();
+  await this.cargarSucursales();
+    },
   methods: {
-    cargarUsuarios() {
-      let usuariosLS = JSON.parse(localStorage.getItem('usuarios_custom'))
-      if (usuariosLS && usuariosLS.length) {
-        this.usuarios = usuariosLS
-      } else {
-        this.usuarios = [...usuariosBase]
-        localStorage.setItem('usuarios_custom', JSON.stringify(this.usuarios))
+    mostrarMensaje(texto, tipo = 'exito') {
+      this.mensaje = texto;
+      setTimeout(() => {
+        this.mensaje = '';
+      }, 3000);
+    },
+    async cargarUsuarios() {
+      try {
+        this.usuarios = await obtenerUsuarios();
+      } catch (error) {
+        this.mostrarMensaje('Error al cargar usuarios.');
       }
     },
-    registrarUsuario() {
-      if (
-        !this.nuevoUsuario.username.trim() ||
-        !this.nuevoUsuario.password.trim() ||
-        !this.nuevoUsuario.rol ||
-        !this.nuevoUsuario.sucursal
-      ) {
-        this.mensaje = 'Por favor, completa todos los campos correctamente.'
-        setTimeout(() => (this.mensaje = ''), 3000)
-        return
-      }
-
-      const existeUsuario = this.usuarios.some(
-        (u, i) =>
-          u.username === this.nuevoUsuario.username &&
-          (!this.modoEdicion || i !== this.indiceEdicion)
-      )
-      if (existeUsuario) {
-        this.mensaje = 'El nombre de usuario ya existe. Elige otro.'
-        setTimeout(() => (this.mensaje = ''), 3000)
-        return
-      }
-
-      if (this.modoEdicion) {
-        this.usuarios[this.indiceEdicion] = { ...this.nuevoUsuario }
-        this.mensaje = 'Usuario actualizado exitosamente.'
-        this.modoEdicion = false
-        this.indiceEdicion = null
-      } else {
-        this.usuarios.push({ ...this.nuevoUsuario })
-        this.mensaje = 'Usuario registrado exitosamente.'
-      }
-
-      localStorage.setItem('usuarios_custom', JSON.stringify(this.usuarios))
-
-      this.nuevoUsuario = { username: '', password: '', rol: '', sucursal: '' }
-      setTimeout(() => (this.mensaje = ''), 3000)
-    },
-    editarUsuario(index) {
-      const usuario = this.usuarios[index]
-      this.nuevoUsuario = { ...usuario }
-      this.modoEdicion = true
-      this.indiceEdicion = index
-      this.mensaje = `Editando usuario: ${usuario.username}`
-    },
-    confirmarEliminacion(index) {
-      this.usuarioAEliminarIndex = index
-      this.modalActivo = true
-    },
-    eliminarUsuario() {
-      this.usuarios.splice(this.usuarioAEliminarIndex, 1)
-      localStorage.setItem('usuarios_custom', JSON.stringify(this.usuarios))
-      this.modalActivo = false
-      this.usuarioAEliminarIndex = null
-      this.mensaje = 'Usuario eliminado.'
-      setTimeout(() => (this.mensaje = ''), 3000)
+    async cargarSucursales() {
+    try {
+      this.sucursales = await obtenerSucursales();
+    } catch (error) {
+      console.error('Error cargando sucursales:', error);
+      this.mostrarMensaje('No se pudieron cargar las sucursales.');
     }
+    },
+    async registrarUsuario() {
+  const payload = {
+    username: this.nuevoUsuario.username,
+    rol: this.nuevoUsuario.rol,
+    sucursal_id: parseInt(this.nuevoUsuario.sucursal_id),
+  };
+
+  // 👇 Solo incluir password si se proporciona y no está vacía
+  if (!this.modoEdicion || (this.nuevoUsuario.password && this.nuevoUsuario.password.trim() !== '')) {
+    payload.password = this.nuevoUsuario.password;
+  }
+  try {
+    if (this.modoEdicion) {
+      await actualizarUsuario(this.usuarioAEliminar.id, payload);
+      this.mostrarMensaje('Usuario actualizado correctamente.');
+    } else {
+      await registrarUsuario(payload);
+      this.mostrarMensaje('Usuario registrado correctamente.');
+    }
+
+    await this.cargarUsuarios();
+    this.resetFormulario();
+  } catch (error) {
+    console.error('Error al registrar/actualizar usuario:', error);
+    this.mostrarMensaje('Error al guardar el usuario.');
+  }
+    },
+    editarUsuario(usuario) {
+      this.nuevoUsuario = {
+        username: usuario.username,
+        password: '', // ⚠️ no mostrar contraseña anterior
+        rol: usuario.rol,
+        sucursal_id: usuario.sucursal_id
+      };
+      this.usuarioAEliminar = usuario;
+      this.modoEdicion = true;
+    },
+    confirmarEliminacion(usuario) {
+      this.usuarioAEliminar = usuario;
+      this.modalActivo = true;
+    },
+    async eliminarUsuario() {
+      if (!this.usuarioAEliminar || !this.usuarioAEliminar.id) {
+        this.mostrarMensaje('ID de usuario inválido');
+        return;
+      }
+
+      try {
+        await eliminarUsuario(this.usuarioAEliminar.id);
+        this.mostrarMensaje('Usuario eliminado correctamente');
+        await this.cargarUsuarios();
+      } catch (error) {
+        console.error(error);
+        this.mostrarMensaje('Error al eliminar usuario');
+      } finally {
+        this.modalActivo = false;
+        this.usuarioAEliminar = null;
+      }
+    },
+    resetFormulario() {
+      this.nuevoUsuario = { username: '', password: '', rol: '', sucursal_id: null };
+      this.modoEdicion = false;
+      this.usuarioAEliminar = null;
+    },
+    obtenerNombreSucursal(id) {
+    const sucursal = this.sucursales.find(s => s.id === id);
+    return sucursal ? sucursal.nombre : 'Sin sucursal';
+    },
   }
 }
 </script>
+
+
 
 <style scoped>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');

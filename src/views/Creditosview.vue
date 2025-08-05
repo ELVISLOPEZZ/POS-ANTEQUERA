@@ -113,8 +113,8 @@
 </template>
 
 
-
 <script>
+import creditosService from "@/services/creditos.service";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
@@ -134,14 +134,14 @@ export default {
       filtroFechaFin: "",
       sucursalActual: localStorage.getItem("store_code") || null,
       pagando: false,
-      dineroEnCaja: 0, 
+      dineroEnCaja: 0,
     };
   },
+
   computed: {
     clientesOrdenados() {
       return this.clientes
         .filter(c =>
-          c.sucursal === this.sucursalActual &&
           c.creditoPendiente > 0 &&
           (c.nombre.toLowerCase().includes(this.busqueda.toLowerCase()) || c.id.toString().includes(this.busqueda)) &&
           (this.filtroMonto === null || c.creditoPendiente >= this.filtroMonto)
@@ -163,127 +163,82 @@ export default {
       });
     }
   },
+
   methods: {
-  cargarDineroEnCaja() {
-    const sucursal = localStorage.getItem("store_code") || "sin_sucursal";
-    const hoy = new Date().toISOString().slice(0, 10);
+    async cargarCreditos() {
+      try {
+        const res = await creditosService.obtenerCreditosActivos();
+        this.clientes = res.data.map(c => ({
+          id: c.id,
+          nombre: c.cliente_nombre,
+          creditoPendiente: c.saldo_pendiente,
+          descripcion: c.descripcion || "",
+          sucursal: c.sucursal_id,
+          pago: null,
+        }));
+      } catch (error) {
+        this.mostrarToast("Error al cargar créditos activos", "error");
+        console.error(error);
+      }
+    },
 
-    const cambioInicial = parseFloat(localStorage.getItem(`cambioInicial_${sucursal}`)) || 0;
-    const totalAcumulado = parseFloat(localStorage.getItem(`total_acumulado_${sucursal}_${hoy}`)) || 0;
+    async crearCredito() {
+      const { nombre, monto, descripcion } = this.nuevoCredito;
+      if (!nombre.trim() || monto <= 0) {
+        this.mostrarToast("⚠️ Ingresa un nombre válido y un monto mayor a 0.", "error");
+        return;
+      }
 
-    this.dineroEnCaja = cambioInicial + totalAcumulado;
-  },
+      try {
+        const data = {
+          cliente_nombre: nombre.trim(),
+          monto_total: monto,
+          descripcion,
+          fecha_limite_pago: null,
+        };
+        await creditosService.registrarCredito(data);
+        this.mostrarToast("Crédito otorgado correctamente.", "exito");
+        this.nuevoCredito = { nombre: "", monto: null, descripcion: "" };
+        this.dineroEnCaja -= monto;
+        await this.cargarCreditos();
+      } catch (error) {
+        this.mostrarToast("Error al crear crédito.", "error");
+        console.error(error);
+      }
+    },
 
-    crearCredito() {
-  const { nombre, monto, descripcion } = this.nuevoCredito;
-  const cajaKey = `dinero_en_caja_${this.sucursalActual}`;
-  const caja = parseFloat(localStorage.getItem(cajaKey)) || 0;
+    async registrarPago(cliente) {
+      if (this.pagando) return;
+      this.pagando = true;
 
-  if (!nombre.trim() || monto <= 0) {
-    this.mostrarToast("⚠️Ingresa un nombre válido y un monto mayor a 0.", "error");
-    return;
-  }
+      if (!cliente.pago || cliente.pago <= 0) {
+        this.mostrarToast("⚠️ Monto inválido.", "error");
+        this.pagando = false;
+        return;
+      }
 
-  if (monto > caja) {
-    this.mostrarToast("⚠️Monto excede el dinero disponible en caja.", "error");
-    return;
-  }
+      if (cliente.pago !== cliente.creditoPendiente) {
+        this.mostrarToast("⚠️ Solo se permiten pagos exactos que liquiden toda la deuda.", "error");
+        this.pagando = false;
+        return;
+      }
 
-  const existente = this.clientes.find(
-    c => c.nombre.toLowerCase() === nombre.toLowerCase() && c.sucursal === this.sucursalActual
-  );
-
-  if (existente) {
-    existente.creditoPendiente += monto;
-    existente.montoInicial += monto;
-    existente.descripcion += descripcion ? `; ${descripcion}` : "";
-  } else {
-    this.clientes.push({
-      id: Date.now(),
-      nombre: nombre.trim(),
-      creditoPendiente: monto,
-      montoInicial: monto,
-      descripcion: descripcion.trim(),
-      sucursal: this.sucursalActual
-    });
-  }
-
-  const nuevoTotal = caja - monto;
-  localStorage.setItem(cajaKey, nuevoTotal.toFixed(2));
-
-  this.nuevoCredito = { nombre: "", monto: null, descripcion: "" };
-  this.guardarClientes();
-  this.mostrarToast("Crédito otorgado y descontado de caja.", "exito");
-  this.dineroEnCaja = nuevoTotal;
-},
-
-registrarPago(cliente) {
-  if (this.pagando) return;
-  this.pagando = true;
-
-  if (!cliente.pago || cliente.pago <= 0) {
-    this.mostrarToast("⚠️Monto inválido.", "error");
-    this.pagando = false;
-    return;
-  }
-
-  if (cliente.pago !== cliente.creditoPendiente) {
-    this.mostrarToast("⚠️ Solo se permiten pagos exactos que liquiden toda la deuda.", "error");
-    this.pagando = false;
-    return;
-  }
-
-  const index = this.clientes.findIndex(c => c.id === cliente.id);
-  const montoPago = cliente.pago;
-  const clienteNombre = this.clientes[index].nombre;
-
-  this.clientes[index].creditoPendiente = 0;
-
-  const usuarioActual = JSON.parse(localStorage.getItem("usuario")) || {
-    username: "desconocido",
-    sucursal: "sin_sucursal"
-  };
-
-  const ingreso = {
-    tipo: "pago_credito",
-    monto: montoPago,
-    fecha: new Date().toISOString(),
-    sucursal: this.sucursalActual,
-    cliente: clienteNombre,
-    descripcion: this.clientes[index].descripcion || '',
-    usuario: {
-      nombre: usuarioActual.username,
-      sucursal: this.sucursalActual
-    }
-  };
-
-  const ingresos = JSON.parse(localStorage.getItem("ingresos_credito") || "[]");
-  ingresos.push(ingreso);
-  localStorage.setItem("ingresos_credito", JSON.stringify(ingresos));
-
-  this.historialFinalizados.push({
-    nombre: clienteNombre,
-    monto: this.clientes[index].montoInicial,
-    descripcion: this.clientes[index].descripcion,
-    fecha: new Date().toISOString(),
-    sucursal: this.sucursalActual
-  });
-
-  this.clientes.splice(index, 1);
-  this.guardarClientes();
-  this.mostrarHistorialFinalizados = true;
-  this.mostrarToast("Crédito pagado y movido al historial.", "exito");
-
-  const cajaKey = `dinero_en_caja_${this.sucursalActual}`;
-  const nuevoTotal = parseFloat(localStorage.getItem(cajaKey)) + montoPago;
-  localStorage.setItem(cajaKey, nuevoTotal.toFixed(2));
-  window.dispatchEvent(new Event("dinero-en-caja-actualizado"));
-  this.dineroEnCaja = nuevoTotal;
-
-  setTimeout(() => {
-    this.pagando = false;
-  }, 500);
-},
+      try {
+        const dataPago = {
+          monto_pagado: cliente.pago,
+          fecha_pago: new Date().toISOString(),
+          observaciones: ""
+        };
+        await creditosService.registrarPago(cliente.id, dataPago);
+        this.mostrarToast("✅ Pago registrado correctamente.", "exito");
+        await this.cargarCreditos();
+      } catch (error) {
+        this.mostrarToast("❌ Error al registrar el pago.", "error");
+        console.error(error);
+      } finally {
+        this.pagando = false;
+      }
+    },
 
     exportarExcel() {
       const data = this.clientesOrdenados.map(c => ({
@@ -319,29 +274,6 @@ registrarPago(cliente) {
       doc.save("clientes_credito.pdf");
     },
 
-    guardarClientes() {
-  const sucursal = this.sucursalActual;
-  const clientesKey = `clientes_${sucursal}`;
-  const historialKey = `historialFinalizados_${sucursal}`;
-
-  localStorage.setItem(clientesKey, JSON.stringify(this.clientes));
-  localStorage.setItem(historialKey, JSON.stringify(this.historialFinalizados));
-},
-
-
-    cargarClientes() {
-  const sucursal = this.sucursalActual;
-  const clientesKey = `clientes_${sucursal}`;
-  const historialKey = `historialFinalizados_${sucursal}`;
-  const dineroKey = `dinero_en_caja_${sucursal}`;
-
-  const datos = localStorage.getItem(clientesKey);
-  const historial = localStorage.getItem(historialKey);
-  this.clientes = datos ? JSON.parse(datos) : [];
-  this.historialFinalizados = historial ? JSON.parse(historial) : [];
-},
-
-
     mostrarToast(mensaje, tipo = "info") {
       const id = this.toastId++;
       this.toasts.push({ id, mensaje, tipo });
@@ -357,24 +289,21 @@ registrarPago(cliente) {
       return isNaN(numero) ? '0.00' : numero.toFixed(2);
     },
 
-    actualizarDineroCaja() {
-      this.dineroEnCaja = parseFloat(localStorage.getItem("dinero_en_caja")) || 0;
+    cargarDineroEnCaja() {
+      const sucursal = localStorage.getItem("store_code") || "sin_sucursal";
+      const cambioInicial = parseFloat(localStorage.getItem(`cambioInicial_${sucursal}`)) || 0;
+      const totalAcumulado = parseFloat(localStorage.getItem(`total_acumulado_${sucursal}_${new Date().toISOString().slice(0, 10)}`)) || 0;
+      this.dineroEnCaja = cambioInicial + totalAcumulado;
     }
   },
-mounted() {
-  this.cargarClientes();            // 🔁 Primero carga todo del localStorage
-  this.cargarDineroEnCaja();       // ✅ Después suma cambioInicial + ventas
-  window.addEventListener("dinero-en-caja-actualizado", this.actualizarDineroCaja);
 
-  this.cargarClientes();
-  window.addEventListener("dinero-en-caja-actualizado", this.actualizarDineroCaja);
-},
-
-  beforeUnmount() {
-    window.removeEventListener("dinero-en-caja-actualizado", this.actualizarDineroCaja);
+  mounted() {
+    this.cargarCreditos();
+    this.cargarDineroEnCaja();
   }
 };
 </script>
+
 
 
 

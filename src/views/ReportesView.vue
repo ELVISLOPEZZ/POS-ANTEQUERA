@@ -92,20 +92,29 @@
 <script>
 import ProductoVentaItem from '../components/ProductoVentaItem.vue'
 import DetalleCreditoItem from '../components/DetalleCreditoItem.vue'
-import CortedeCaja from '../components/CortedeCaja.vue' // Importa tu componente aquí
+import CortedeCaja from '../components/CortedeCaja.vue'
 
 import jsPDF from 'jspdf'
-import 'jspdf-autotable'
+import autoTable from 'jspdf-autotable'  // Importar autoTable como función
 import * as XLSX from 'xlsx'
 import { saveAs } from 'file-saver'
 
 export default {
   components: { ProductoVentaItem, DetalleCreditoItem, CortedeCaja },
-  props: ['ventas', 'sucursal'],
+  props: {
+    ventas: {
+      type: Array,
+      default: () => []
+    },
+    sucursal: {
+      type: String,
+      default: ''
+    }
+  },
   data() {
     const hoy = new Date().toISOString().split('T')[0]
     return {
-      pestañaActiva: 'ventas', // pestaña inicial
+      pestañaActiva: 'ventas',
       fechaInicio: hoy,
       fechaFin: hoy,
       filtroMetodo: '',
@@ -130,7 +139,8 @@ export default {
         descripcion: pago.descripcion || 'Sin descripción'
       }))
 
-      const todasLasVentas = [...this.ventas, ...pagosCreditoFormateados]
+      // Aseguramos que this.ventas sea Array para evitar errores
+      const todasLasVentas = Array.isArray(this.ventas) ? [...this.ventas, ...pagosCreditoFormateados] : pagosCreditoFormateados
 
       return todasLasVentas.filter(venta => {
         const fechaVentaStr = new Date(venta.fecha).toISOString().split('T')[0]
@@ -142,13 +152,14 @@ export default {
         const coincideCajero = this.filtroCajero
           ? cajeroNombre.includes(this.filtroCajero.toLowerCase())
           : true
-const coincideSucursal = this.filtroSucursal === 'Todas' || this.obtenerSucursalVenta(venta) === this.filtroSucursal
-
+        const coincideSucursal = this.filtroSucursal === 'Todas' || this.obtenerSucursalVenta(venta) === this.filtroSucursal
 
         return dentroDeRango && coincideMetodo && coincideCajero && coincideSucursal
       })
     }
   },
+
+
   methods: {
     obtenerNombreCajero(venta) {
       if (!venta.usuario) return 'Desconocido'
@@ -170,26 +181,28 @@ const coincideSucursal = this.filtroSucursal === 'Todas' || this.obtenerSucursal
     },
     exportarPDF() {
       const doc = new jsPDF()
-      doc.text("Reporte de Ventas", 14, 10)
+
       const rows = this.ventasFiltradasConPagosCredito.map(v => [
         v.id,
-        new Date(v.fecha).toLocaleString(),
+        this.formatearFechaMexico(v.fecha),
         this.obtenerNombreCajero(v),
         this.obtenerSucursalVenta(v),
         `$${v.total.toFixed(2)}`,
         v.estadoCredito === 'pendiente' ? 'Crédito' : (v.estadoCredito === 'pagado' ? 'Pagado' : v.metodoPago)
       ])
-      doc.autoTable({
+
+      autoTable(doc, {
         head: [["ID", "Fecha", "Cajero", "Sucursal", "Total", "Método de Pago"]],
         body: rows,
         startY: 20
       })
+
       doc.save("reporte_ventas.pdf")
     },
     exportarExcel() {
       const data = this.ventasFiltradasConPagosCredito.map(v => ({
         ID: v.id,
-        Fecha: new Date(v.fecha).toLocaleString(),
+        Fecha: this.formatearFechaMexico(v.fecha),
         Cajero: this.obtenerNombreCajero(v),
         Sucursal: this.obtenerSucursalVenta(v),
         Total: v.total,
@@ -201,6 +214,18 @@ const coincideSucursal = this.filtroSucursal === 'Todas' || this.obtenerSucursal
       const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
       const blob = new Blob([buffer], { type: 'application/octet-stream' })
       saveAs(blob, 'reporte_ventas.xlsx')
+    },
+    formatearFechaMexico(fechaISO) {
+      return new Intl.DateTimeFormat('es-MX', {
+        timeZone: 'America/Mexico_City',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+      }).format(new Date(fechaISO))
     }
   }
 }

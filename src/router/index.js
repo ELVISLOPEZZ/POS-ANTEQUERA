@@ -5,7 +5,7 @@ import Creditosview from '../views/Creditosview.vue'
 import InventarioView from '../views/InventarioView.vue'
 import ReportesView from '../views/ReportesView.vue'
 import AdministradorView from '../views/AdministradorView.vue'
-import { isLoggedIn } from '../auth.js'
+import { isLoggedIn } from '../services/auth.js'
 
 const routes = [
   { path: '/', name: 'Login', component: LoginView },

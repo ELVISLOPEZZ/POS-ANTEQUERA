@@ -24,23 +24,25 @@
       ⚠️ Alerta: Los siguientes productos están caducados o por caducar:
       <ul>
         <li v-for="p in productosCaducados" :key="p.id">
-          • {{ p.nombre }} (Caducidad: {{ p.fechaCaducidad }})
+          • {{ p.nombre }} (Caducidad: {{ p.fecha_caducidad }})
         </li>
       </ul>
     </div>
 
     <div class="botones-superior" style="gap: 0.7rem; flex-wrap: wrap; align-items: center;">
-      <button class="btn-agregar" @click="agregarProducto">➕ Agregar Producto</button>
+      <button class="btn-agregar" @click="crearProducto">➕ Agregar Producto</button>
       <button class="btn-agregar" @click="abrirModalCategoria">📁 Añadir Categoría</button>
       <button class="btn-agregar btn-eliminar-categoria" @click="abrirModalEliminarCategoria">🗑️ Eliminar Categoría</button>
 
 
       <div class="filtro-dropdown">
-        <select v-model="categoriaSeleccionada" @change="aplicarFiltro">
-          <option value="">Todas las categorías</option>
-          <option v-for="cat in categoriasUnicas" :key="cat">{{ cat }}</option>
-        </select>
+<select id="categoria" v-model="formulario.categoria_id" required>
+  <option value="" disabled>Seleccione categoría</option>
+  <option v-for="cat in categorias" :key="cat.id" :value="cat.id">{{ cat.nombre }}</option>
+</select>
       </div>
+
+      
 
       <input
         class="input-busqueda"
@@ -133,7 +135,7 @@
 
     <div v-if="modalActivo" class="modal">
       <div class="modal-contenido">
-        <h2>{{ productoSeleccionado === null ? 'Agregar Producto' : 'Editar Producto' }}</h2>
+        <h2>{{ productoSeleccionado === null ? 'Agregar Producto🥫' : 'Editar Producto' }}</h2>
         <form @submit.prevent="guardarCambios">
           <div class="form-grid">
             <div class="form-row">
@@ -143,7 +145,7 @@
             <div class="form-row">
               <label for="categoria">Categoría</label>
 
-<select id="categoria" v-model="formulario.categoria" required>
+<select id="categoria" v-model="formulario.categoria_id" required>
   <option value="" disabled>Seleccione categoría</option>
   <option v-for="cat in categoriasUnicas" :key="cat">{{ cat }}</option>
 </select>
@@ -168,7 +170,7 @@
               <label for="codigoBarras">Código de Barras</label>
               <input
                 id="codigoBarras"
-                v-model="formulario.codigoBarras"
+                v-model="formulario.codigo_barras"
                 type="text"
                 pattern="\d{1,13}"
                 maxlength="13"
@@ -178,7 +180,7 @@
             </div>
             <div class="form-row">
               <label for="fechaCaducidad">Caducidad</label>
-              <input id="fechaCaducidad" v-model="formulario.fechaCaducidad" type="date" required />
+              <input id="fechaCaducidad" v-model="formulario.fecha_caducidad" type="date" required />
             </div>
             <div class="form-row form-row-full">
               <label for="imagen">URL de imagen</label>
@@ -220,298 +222,395 @@
 </template>
 
 <script>
-import { obtenerProductosPorSucursal } from '../productos.js'
+import {
+  obtenerProductos,
+  obtenerProductoPorId,
+  crearProducto,
+  actualizarProducto,
+  eliminarProducto,
+  obtenerAlertasInventario,
+  obtenerCategorias,
+  crearCategoria,
+  eliminarCategoria
+} from '@/services/inventario.service';
+
+
+
 export default {
   data() {
     return {
-      obtenerProductosPorSucursal,
-      sucursal: localStorage.getItem('store_code') || '',
+      sucursal: localStorage.getItem('store_code') || 'SUCURSAL1',
       productos: [],
+      categorias: [],
       siguienteId: Number(localStorage.getItem('siguienteId')) || 4,
       modalActivo: false,
       modalCategoriaActivo: false,
       productoSeleccionado: null,
-      formulario: { nombre: '', categoria: '', precio: 0, stock: 0, imagen: '', codigoBarras: '', fechaCaducidad: '' },
+      categoria_id: '',
+
+      formulario: {
+        nombre: '',
+        categoria_id: '',
+        precio: 0,
+        stock: 0,
+        imagen: '',
+        codigo_barras: '',
+        fecha_caducidad: ''
+      },
+
       formCategoria: { nombre: '' },
       terminoBusqueda: '',
       categoriaSeleccionada: '',
-      filtroStock: 'todos',   // filtro stock: todos, agotados, conStock
+      filtroStock: 'todos', // opciones: todos, agotados, conStock
       productosFiltrados: [],
       alertaActiva: false,
       productosBajoStock: [],
-      categoriasPorSucursal: JSON.parse(localStorage.getItem('categoriasPorSucursal')) || {},
+categoriasPorSucursal: [],
       mensajeEmergente: '',
+      tipoMensaje: '',
       modalEliminarActivo: false,
       productoAEliminar: null,
       productosCaducados: [],
       alertaCaducidadActiva: false,
-      mensajeEmergente: '',
-      tipoMensaje: '', // ✅ nuevo: puede ser 'exito' o 'error'
       modalEliminarCategoriaActivo: false,
-categoriaAEliminar: '',
-busquedaCategoriaEliminar: '',
-
-    }
+      categoriaAEliminar: '',
+      busquedaCategoriaEliminar: ''
+    };
   },
-computed: {
+
+  computed: {
 categoriasUnicas() {
-  // Categorías de productos reales en esta sucursal
-  const categoriasProductos = this.productos.map(p => p.categoria)
-  // Categorías creadas manualmente para esta sucursal
-  const creadasSucursal = this.categoriasPorSucursal[this.sucursal] || []
-  const todas = new Set([...categoriasProductos, ...creadasSucursal])
-  return Array.from(todas)
+  return this.categorias.map(cat => cat.nombre);
 },
-categoriasFiltradasEliminar() {
-  const todas = this.categoriasPorSucursal[this.sucursal] || []
-  const termino = this.busquedaCategoriaEliminar.toLowerCase()
-  return todas.filter(cat => cat.toLowerCase().includes(termino))
-},
+    categoriasFiltradasEliminar() {
+      const todas = this.categoriasPorSucursal[this.sucursal] || [];
+      const termino = this.busquedaCategoriaEliminar.toLowerCase();
+      return todas.filter(cat => cat.toLowerCase().includes(termino));
+    }
   },
+
+
   created() {
-    let storeCode = localStorage.getItem('store_code')
-    if (!storeCode) {
-      storeCode = 'SUCURSAL1'
-      localStorage.setItem('store_code', storeCode)
+    // Asegurar que exista una sucursal en localStorage
+    if (!this.sucursal) {
+      this.sucursal = 'SUCURSAL1';
+      localStorage.setItem('store_code', this.sucursal);
     }
-    this.sucursal = storeCode
-    this.refrescarProductos()
-    this.aplicarFiltro()
-    this.verificarBajoInventario()
+
+    this.obtenerCategorias();
+    this.refrescarProductos();
   },
+
+
   methods: {
-    verificarBajoInventario() {
-      const umbral = 5
-      this.productosBajoStock = this.productos.filter(p => p.stock <= umbral)
-      this.alertaActiva = this.productosBajoStock.length > 0
-      const hoy = new Date().toISOString().slice(0, 10)
-      this.productosCaducados = this.productos.filter(p => p.fechaCaducidad && p.fechaCaducidad <= hoy)
-      this.alertaCaducidadActiva = this.productosCaducados.length > 0
-    },
-    agregarProducto() {
-      this.productoSeleccionado = null
-      this.formulario = { nombre: '', categoria: '', precio: 0, stock: 0, imagen: '', codigoBarras: '', fechaCaducidad: '' }
-      this.modalActivo = true
-    },
-    abrirModalCategoria() {
-      this.formCategoria = { nombre: '' }
-      this.modalCategoriaActivo = true
-    },
-guardarCategoria() {
-  const nombre = this.formCategoria.nombre.trim()
-
-  if (!nombre) {
-    this.tipoMensaje = 'error'
-    this.mensajeEmergente = '❌ El nombre no puede estar vacío.'
-    setTimeout(() => this.mensajeEmergente = '', 3000)
-    return
+    async refrescarProductos() {
+  try {
+    this.productos = await obtenerProductos(); // ya vienen filtrados por sucursal
+    this.aplicarFiltro();
+    this.verificarBajoInventario();
+  } catch (error) {
+    console.error('Error al obtener productos:', error);
+    this.tipoMensaje = 'error';
+    this.mensajeEmergente = '❌ No se pudieron cargar los productos.';
+    setTimeout(() => (this.mensajeEmergente = ''), 4000);
   }
-
-  // Inicializar si no existe aún la sucursal
-  if (!this.categoriasPorSucursal[this.sucursal]) {
-    this.categoriasPorSucursal[this.sucursal] = []
-  }
-
-  // Verificar si ya existe en esta sucursal
-  const yaExiste = this.categoriasPorSucursal[this.sucursal].includes(nombre) ||
-                   this.productos.some(p => p.categoria === nombre)
-
-  if (yaExiste) {
-    this.tipoMensaje = 'advertencia'
-    this.mensajeEmergente = `⚠️ La categoría "${nombre}" ya existe en esta sucursal.`
-    setTimeout(() => this.mensajeEmergente = '', 4000)
-    return
-  }
-
-  // Agregar categoría a la sucursal
-  this.categoriasPorSucursal[this.sucursal].push(nombre)
-  localStorage.setItem('categoriasPorSucursal', JSON.stringify(this.categoriasPorSucursal))
-
-  this.tipoMensaje = 'exito'
-  this.mensajeEmergente = `✅ Categoría "${nombre}" añadida a ${this.sucursal}.`
-  this.modalCategoriaActivo = false
-  this.formCategoria.nombre = ''
-
-  // Refrescar para filtros
-  this.refrescarProductos()
-  setTimeout(() => this.mensajeEmergente = '', 3000)
-},
-abrirModalEliminarCategoria() {
-  this.busquedaCategoriaEliminar = ''
-  this.categoriaAEliminar = ''
-  this.modalEliminarCategoriaActivo = true
-},
-
-cancelarEliminarCategoria() {
-  this.modalEliminarCategoriaActivo = false
-},
-
-eliminarCategoria() {
-  const categoria = this.categoriaAEliminar
-  if (!categoria) {
-    this.tipoMensaje = 'error'
-    this.mensajeEmergente = '❌ Debes seleccionar una categoría.'
-    setTimeout(() => (this.mensajeEmergente = ''), 3000)
-    return
-  }
-
-  const tieneProductos = this.productos.some(p => p.categoria === categoria)
-  if (tieneProductos) {
-    this.tipoMensaje = 'error'
-    this.mensajeEmergente = `⚠️ No se puede eliminar. Existen productos con la categoría "${categoria}".`
-    setTimeout(() => (this.mensajeEmergente = ''), 4000)
-    return
-  }
-
-  const categorias = this.categoriasPorSucursal[this.sucursal] || []
-  this.categoriasPorSucursal[this.sucursal] = categorias.filter(c => c !== categoria)
-
-  localStorage.setItem('categoriasPorSucursal', JSON.stringify(this.categoriasPorSucursal))
-
-  this.tipoMensaje = 'exito'
-  this.mensajeEmergente = `✅ Categoría "${categoria}" eliminada correctamente.`
-  this.modalEliminarCategoriaActivo = false
-  this.categoriaAEliminar = ''
-
-  this.refrescarProductos()
-  setTimeout(() => (this.mensajeEmergente = ''), 3000)
-},
-    cancelarCategoria() {
-      this.modalCategoriaActivo = false
-    },
-    editarProducto(id) {
-      this.productoSeleccionado = id
-      const producto = this.productos.find(p => p.id === id)
-      this.formulario = { ...producto }
-      this.modalActivo = true
-    },
-guardarCambios() {
-  const codigo = this.formulario.codigoBarras?.toString().trim() || ''
-const rol = localStorage.getItem('rol_usuario') || 'cajero'
-
-  if (!/^\d{1,13}$/.test(codigo)) {
-    this.tipoMensaje = 'error'
-    this.mensajeEmergente = '❌ El código de barras debe tener solo números y máximo 13 dígitos.'
-    setTimeout(() => (this.mensajeEmergente = ''), 4000)
-    return
-  }
-
-  let todosLosProductos = JSON.parse(localStorage.getItem('productos')) || []
-  const esNuevo = this.productoSeleccionado === null
-  const productosSucursal = todosLosProductos.filter(p => p.sucursal === this.sucursal)
-
-  const yaExiste = productosSucursal.some(p =>
-    p.codigoBarras === codigo && (esNuevo || p.id !== this.productoSeleccionado)
-  )
-
-  if (yaExiste) {
-    this.tipoMensaje = 'error'
-    this.mensajeEmergente = `❌ Ya existe un producto con ese código de barras en la sucursal "${this.sucursal}".`
-    setTimeout(() => (this.mensajeEmergente = ''), 4000)
-    return
-  }
-
-  if (esNuevo) {
-    const nuevoProducto = {
-      id: this.siguienteId++,
-      ...this.formulario,
-      codigoBarras: codigo,
-      sucursal: this.sucursal
-    }
-    todosLosProductos.push(nuevoProducto)
-
-  } else {
-    const index = todosLosProductos.findIndex(p => p.id === this.productoSeleccionado)
-    if (index !== -1) {
-      const productoOriginal = todosLosProductos[index]
-      const stockNuevo = this.formulario.stock
-
-      // ✅ Solo bloquear reducción de stock si el usuario NO es admin
-      if (rol !== 'admin' && stockNuevo < productoOriginal.stock) {
-        this.tipoMensaje = 'error'
-        this.mensajeEmergente = '⚠️ No puedes reducir el stock. Solo está permitido aumentarlo.'
-        setTimeout(() => (this.mensajeEmergente = ''), 4000)
-        return
-      }
-
-      todosLosProductos[index] = {
-        id: this.productoSeleccionado,
-        ...this.formulario,
-        codigoBarras: codigo,
-        sucursal: this.sucursal
-      }
-    }
-  }
-
-  localStorage.setItem('siguienteId', this.siguienteId)
-  localStorage.setItem('productos', JSON.stringify(todosLosProductos))
-  this.modalActivo = false
-  this.refrescarProductos()
-
-  this.tipoMensaje = 'exito'
-  this.mensajeEmergente = esNuevo
-    ? '✅ Producto creado exitosamente'
-    : '✏️✅ Producto editado correctamente'
-
-  setTimeout(() => {
-    this.mensajeEmergente = ''
-    this.tipoMensaje = ''
-  }, 3000)
-},
-    eliminarProducto(id) {
-      const producto = this.productos.find(p => p.id === id)
-      if (producto) {
-        this.abrirModalEliminar(producto)
-      }
-    },
-    cancelarEdicion() {
-      this.modalActivo = false
-    },
-    refrescarProductos() {
-      const todosLosProductos = JSON.parse(localStorage.getItem('productos')) || []
-      this.productos = todosLosProductos.filter(p => p.sucursal === this.sucursal)
-      this.aplicarFiltro()
-      this.verificarBajoInventario()
     },
     aplicarFiltro() {
-      const termino = this.terminoBusqueda.toLowerCase().trim()
+      const termino = this.terminoBusqueda.toLowerCase().trim();
       this.productosFiltrados = this.productos.filter(p => {
-        const coincideNombre = p.nombre.toLowerCase().includes(termino)
+        const coincideNombre = p.nombre.toLowerCase().includes(termino);
         const coincideCategoria = this.categoriaSeleccionada
           ? p.categoria === this.categoriaSeleccionada
-          : true
-        let cumpleFiltroStock = true
+          : true;
+        let cumpleFiltroStock = true;
         if (this.filtroStock === 'agotados') {
-          cumpleFiltroStock = p.stock === 0
+          cumpleFiltroStock = p.stock === 0;
         } else if (this.filtroStock === 'conStock') {
-          cumpleFiltroStock = p.stock > 0
+          cumpleFiltroStock = p.stock > 0;
         }
-        return coincideNombre && coincideCategoria && cumpleFiltroStock
-      })
+        return coincideNombre && coincideCategoria && cumpleFiltroStock;
+      });
     },
-    abrirModalEliminar(producto) {
-      this.productoAEliminar = producto
-      this.modalEliminarActivo = true
+    verificarBajoInventario() {
+      const umbral = 5;
+      this.productosBajoStock = this.productos.filter(p => p.stock <= umbral);
+      this.alertaActiva = this.productosBajoStock.length > 0;
+
+      const hoy = new Date().toISOString().slice(0, 10);
+      this.productosCaducados = this.productos.filter(p => p.fecha_caducidad && p.fecha_caducidad <= hoy);
+      this.alertaCaducidadActiva = this.productosCaducados.length > 0;
+    },
+    crearProducto() {
+      this.productoSeleccionado = null;
+      this.formulario = {
+        nombre: '',
+        categoria_id: '',
+        precio: 0,
+        stock: 0,
+        imagen: '',
+        codigo_barras: '',
+        fecha_caducidad: ''
+      };
+      this.modalActivo = true;
+    },
+    async editarProducto(id) {
+  try {
+    this.productoSeleccionado = id;
+
+    // Obtener el producto actualizado desde el backend
+    const producto = await obtenerProductoPorId(id);
+
+    if (producto) {
+      this.formulario = {
+        nombre: producto.nombre || '',
+        categoria_id: producto.categoria_id || '',
+        precio: producto.precio || 0,
+        stock: producto.stock || 0,
+        imagen: producto.imagen || '',
+        codigo_barras: producto.codigo_barras || '',
+        fecha_caducidad: producto.fecha_caducidad || ''
+      };
+      this.modalActivo = true;
+    } else {
+      this.limpiarFormulario();
+      this.productoSeleccionado = null;
+      this.modalActivo = false;
+      console.warn(`No se encontró el producto con id ${id} para editar.`);
+    }
+  } catch (error) {
+    console.error('Error al obtener el producto para editar:', error);
+    this.limpiarFormulario();
+    this.modalActivo = false;
+  }
+    },
+async guardarCambios() {
+  const codigo = this.formulario.codigo_barras?.toString().trim() || '';
+  const rol = localStorage.getItem('rol_usuario') || 'cajero';
+
+  if (!/^\d{1,13}$/.test(codigo)) {
+    this.tipoMensaje = 'error';
+    this.mensajeEmergente = '❌ El código de barras debe tener solo números y máximo 13 dígitos.';
+    setTimeout(() => (this.mensajeEmergente = ''), 4000);
+    return;
+  }
+
+  const sucursalMap = {
+    'SUCURSAL1': 1,
+    'SUCURSAL2': 2,
+    'SUCURSAL3': 3
+  };
+  const idSucursal = sucursalMap[this.sucursal] || 1;
+
+  try {
+    const todosLosProductos = await obtenerProductos();
+    const esNuevo = this.productoSeleccionado === null;
+    const productosSucursal = todosLosProductos.filter(p => p.sucursal_id === idSucursal);
+
+    const yaExiste = productosSucursal.some(p =>
+      p.codigoBarras === codigo && (esNuevo || p.id !== this.productoSeleccionado)
+    );
+
+    if (yaExiste) {
+      this.tipoMensaje = 'error';
+      this.mensajeEmergente = `❌ Ya existe un producto con ese código de barras en la sucursal "${this.sucursal}".`;
+      setTimeout(() => (this.mensajeEmergente = ''), 4000);
+      return;
+    }
+
+if (esNuevo) {
+  const nuevoProducto = {
+    nombre: this.formulario.nombre,
+    precio: parseFloat(this.formulario.precio),
+    stock: parseInt(this.formulario.stock),
+    categoria_id: this.formulario.categoria_id,
+    codigoBarras: codigo,
+    sucursal_id: idSucursal,
+    imagen: this.formulario.imagen || '',
+    fechaCaducidad: this.formulario.fecha_caducidad || ''
+  };
+
+  console.log('Datos para crear producto:', nuevoProducto);
+
+
+      await crearProducto(nuevoProducto);
+      this.siguienteId++;
+      localStorage.setItem('siguienteId', this.siguienteId);
+      this.tipoMensaje = 'exito';
+      this.mensajeEmergente = '✅ Producto creado exitosamente';
+    } else {
+      const productoOriginal = todosLosProductos.find(p => p.id === this.productoSeleccionado);
+      const stockNuevo = this.formulario.stock;
+
+      if (rol !== 'admin' && stockNuevo < productoOriginal.stock) {
+        this.tipoMensaje = 'error';
+        this.mensajeEmergente = '⚠️ No puedes reducir el stock. Solo está permitido aumentarlo.';
+        setTimeout(() => (this.mensajeEmergente = ''), 4000);
+        return;
+      }
+
+      const productoActualizado = {
+        ...this.formulario,
+        codigoBarras: codigo,
+        sucursal_id: idSucursal,
+        fechaCaducidad: this.formulario.fecha_caducidad
+      };
+
+      await actualizarProducto(this.productoSeleccionado, productoActualizado);
+      this.tipoMensaje = 'exito';
+      this.mensajeEmergente = '✏️✅ Producto editado correctamente';
+    }
+
+    this.modalActivo = false;
+    await this.refrescarProductos();
+
+    setTimeout(() => {
+      this.mensajeEmergente = '';
+      this.tipoMensaje = '';
+    }, 3000);
+
+  } catch (error) {
+    console.error('Error guardando producto:', error);
+    this.tipoMensaje = 'error';
+    this.mensajeEmergente = '❌ Error al guardar el producto. Intente de nuevo.';
+    setTimeout(() => {
+      this.mensajeEmergente = '';
+      this.tipoMensaje = '';
+    }, 4000);
+  }
+},
+
+
+    eliminarProducto(id) {
+      const producto = this.productos.find(p => p.id === id);
+      if (producto) {
+        this.productoAEliminar = producto;
+        this.modalEliminarActivo = true;
+      }
     },
     cancelarEliminar() {
-      this.modalEliminarActivo = false
-      this.productoAEliminar = null
+      this.modalEliminarActivo = false;
+      this.productoAEliminar = null;
     },
-    confirmarEliminar() {
-      if (!this.productoAEliminar) return
-      let todosLosProductos = JSON.parse(localStorage.getItem('productos')) || []
-      todosLosProductos = todosLosProductos.filter(p => p.id !== this.productoAEliminar.id)
-      localStorage.setItem('productos', JSON.stringify(todosLosProductos))
-      this.refrescarProductos()
-      this.modalEliminarActivo = false
-      this.productoAEliminar = null
-      this.mensajeEmergente = 'Producto eliminado correctamente ❌'
-      setTimeout(() => {
-        this.mensajeEmergente = ''
-      }, 3000)
+    async confirmarEliminar() {
+      if (!this.productoAEliminar) return;
+
+      try {
+        await eliminarProducto(this.productoAEliminar.id);
+        this.mensajeEmergente = 'Producto eliminado correctamente ❌';
+        this.modalEliminarActivo = false;
+        this.productoAEliminar = null;
+        await this.refrescarProductos();
+        setTimeout(() => {
+          this.mensajeEmergente = '';
+        }, 3000);
+      } catch (error) {
+        console.error('Error eliminando producto:', error);
+        this.tipoMensaje = 'error';
+        this.mensajeEmergente = '❌ Error al eliminar el producto. Intente de nuevo.';
+        setTimeout(() => {
+          this.mensajeEmergente = '';
+          this.tipoMensaje = '';
+        }, 4000);
+      }
+    },
+    abrirModalCategoria() {
+      this.formCategoria = { nombre: '' };
+      this.modalCategoriaActivo = true;
+    },
+async guardarCategoria() {
+  const nombre = this.formCategoria.nombre.trim();
+  if (!nombre) return;
+
+  try {
+    await crearCategoria({ nombre, sucursal_id: this.sucursal });
+    this.modalCategoriaActivo = false;
+    this.formCategoria.nombre = '';
+    await this.obtenerCategorias(); // recarga del backend
+    this.tipoMensaje = 'exito';
+    this.mensajeEmergente = '✅ Categoría creada correctamente';
+  } catch (error) {
+    console.error(error);
+    this.tipoMensaje = 'error';
+    this.mensajeEmergente = '❌ Error al crear categoría';
+  } finally {
+    setTimeout(() => (this.mensajeEmergente = ''), 3000);
+  }
+},
+    abrirModalEliminarCategoria() {
+      this.busquedaCategoriaEliminar = '';
+      this.categoriaAEliminar = '';
+      this.modalEliminarCategoriaActivo = true;
+    },
+    cancelarEliminarCategoria() {
+      this.modalEliminarCategoriaActivo = false;
+    },
+    eliminarCategoria() {
+      const categoria = this.categoriaAEliminar;
+      if (!categoria) {
+        this.tipoMensaje = 'error';
+        this.mensajeEmergente = '❌ Debes seleccionar una categoría.';
+        setTimeout(() => (this.mensajeEmergente = ''), 3000);
+        return;
+      }
+
+      const tieneProductos = this.productos.some(p => p.categoria === categoria);
+      if (tieneProductos) {
+        this.tipoMensaje = 'error';
+        this.mensajeEmergente = `⚠️ No se puede eliminar. Existen productos con la categoría "${categoria}".`;
+        setTimeout(() => (this.mensajeEmergente = ''), 4000);
+        return;
+      }
+
+      const categorias = this.categoriasPorSucursal[this.sucursal] || [];
+      this.categoriasPorSucursal[this.sucursal] = categorias.filter(c => c !== categoria);
+      localStorage.setItem('categoriasPorSucursal', JSON.stringify(this.categoriasPorSucursal));
+
+      this.tipoMensaje = 'exito';
+      this.mensajeEmergente = `✅ Categoría "${categoria}" eliminada correctamente.`;
+      this.modalEliminarCategoriaActivo = false;
+      this.categoriaAEliminar = '';
+
+      this.refrescarProductos();
+      setTimeout(() => (this.mensajeEmergente = ''), 3000);
+    },
+    cancelarEdicion() {
+  this.modalActivo = false;
+  this.productoSeleccionado = null;
+  this.limpiarFormulario();
+    },
+    limpiarFormulario() {
+  this.formulario = {
+    nombre: '',
+    categoria_id: '',
+    precio: 0,
+    stock: 0,
+    imagen: '',
+    codigo_barras: '',
+    fecha_caducidad: ''
+  };
+    },
+async obtenerCategorias() {
+  try {
+    const respuesta = await obtenerCategorias(this.sucursal);
+
+    // Si tu función devuelve el array directamente, usa:
+    if (Array.isArray(respuesta)) {
+      this.categorias = respuesta;
+    } else if (respuesta && Array.isArray(respuesta.data)) {
+      this.categorias = respuesta.data;
+    } else {
+      this.categorias = [];
+      console.warn('No se recibieron categorías válidas');
     }
+  } catch (error) {
+    console.error('Error cargando categorías', error);
+    this.categorias = [];
   }
 }
+
+
+  }
+};
 </script>
 
 

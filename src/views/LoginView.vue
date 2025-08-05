@@ -30,12 +30,20 @@
         </div>
 
         <div class="input-group">
-          <label for="sucursal">Selecciona una sucursal</label>
-          <select id="sucursal" v-model="sucursalSeleccionada" required>
-            <option disabled value="">-- Elige una sucursal --</option>
-            <option value="SUCURSAL1">Sucursal 1</option>
-            <option value="SUCURSAL2">Sucursal 2</option>
-            <option value="SUCURSAL3">Sucursal 3</option>
+          <label for="sucursal">Sucursal</label>
+          <select
+            id="sucursal"
+            v-model="sucursalSeleccionada"
+            required
+          >
+            <option disabled value="">-- Selecciona una sucursal --</option>
+            <option
+              v-for="sucursal in sucursales"
+              :key="sucursal.id"
+              :value="sucursal.id"
+            >
+              {{ sucursal.nombre }}
+            </option>
           </select>
         </div>
 
@@ -47,7 +55,8 @@
 </template>
 
 <script>
-import { login } from '../auth.js'
+import { login } from '../services/auth.js'
+import { obtenerSucursales } from '../services/sucursal.service.js'
 
 export default {
   name: 'LoginView',
@@ -56,28 +65,45 @@ export default {
       username: '',
       password: '',
       sucursalSeleccionada: '',
-      error: ''
+      error: '',
+      sucursales: []
+    }
+  },
+  async mounted() {
+    try {
+      this.sucursales = await obtenerSucursales()
+    } catch (error) {
+      console.error('Error cargando sucursales:', error)
+      this.error = 'No se pudieron cargar las sucursales, intenta más tarde.'
     }
   },
   methods: {
-handleLogin() {
-  if (!this.sucursalSeleccionada) {
-    this.error = 'Debes seleccionar una sucursal';
-    return;
-  }
-  const result = login(this.username, this.password, this.sucursalSeleccionada);
-  if (result.success) {
-    this.error = '';
-    this.$emit('login-exitoso', result.user);
-    this.$router.push('/caja'); // Redirige a la vista principal
-  } else {
-    this.error = result.message; 
-  }
-}
+    handleLogin() {
+      if (!this.sucursalSeleccionada) {
+        this.error = 'Debes seleccionar una sucursal';
+        return;
+      }
 
+      login(this.username, this.password)
+        .then(result => {
+          this.error = '';
+
+          // Guardar token y datos del usuario
+          localStorage.setItem('token', result.token);
+          localStorage.setItem('rol_usuario', result.usuario.rol);
+          localStorage.setItem('store_code', this.sucursalSeleccionada); // ahora guardas la sucursal elegida
+
+          this.$emit('login-exitoso', result.usuario);
+          this.$router.push('/caja');
+        })
+        .catch(err => {
+          this.error = err;
+        });
+    }
   }
 }
 </script>
+
 
 
 <style scoped>
