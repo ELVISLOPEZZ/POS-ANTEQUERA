@@ -613,7 +613,6 @@ async obtenerCategorias() {
 };
 </script>
 
-
 <style scoped>
 .inventario {
   font-family: 'Segoe UI', sans-serif;

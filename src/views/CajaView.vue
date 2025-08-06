@@ -63,7 +63,7 @@
             />
             <div>
               <h3>{{ producto.nombre }}</h3>
-              <p class="precio">$ {{ producto.precio.toFixed(2) }}</p>
+<p class="precio">$ {{ Number(producto.precio).toFixed(2) }}</p>
               <p class="stock" v-if="producto.stock !== undefined">Stock: {{ producto.stock }}</p>
               <p class="codigo">Código: {{ producto.codigoBarras }}</p>
             </div>
@@ -158,19 +158,18 @@
           <button class="btn-crear" @click="guardarCredito">Otorgar crédito</button>
         </div>
 
-<div v-if="totalAcumulado > 0" class="recuadro-total-acumulado">
-  <p><strong>Ventas totales del día:</strong> ${{ totalAcumulado.toFixed(2) }}</p>
-
-
-<div class="dinero-total">
-  <strong> Dinero en caja:</strong> ${{ dineroEnCajaTotal.toFixed(2) }}
-</div>
-
-</div>
-
         <button @click="mostrarModalDePago" :disabled="carrito.length === 0 || metodoPago === 'credito'" class="btn-finalizar">
-          Finalizar Venta
+        Finalizar Venta
         </button>
+
+        <div v-if="totalAcumulado > 0" class="recuadro-total-acumulado">
+<p><strong>Ventas totales del día:</strong> ${{ totalAcumulado.toFixed(2) }}</p>
+        <div class="dinero-total">
+<p><strong>Dinero en caja:</strong> ${{ dineroEnCajaTotal.toFixed(2) }}</p>
+        </div>
+
+</div>
+
       </section>
 
   <!-- Modal de Pago -->
@@ -242,6 +241,8 @@
 
 <script>
 import { obtenerProductos, actualizarProducto } from '../services/inventario.service.js';
+import { realizarVenta, otorgarCredito } from '../services/ventas.service.js';
+
 export default {
   data() {
         return {
@@ -291,10 +292,13 @@ export default {
       const texto = this.busquedaProducto.toLowerCase();
       return this.productos.filter(p => p.nombre.toLowerCase().includes(texto));
     },
-  dineroEnCajaTotal() {
-    return this.dineroInicial + this.totalAcumulado;
-  },
-    },
+dineroEnCajaTotal() {
+  const inicial = parseFloat(this.dineroInicial) || 0;
+  const total = parseFloat(this.totalAcumulado) || 0;
+  return inicial + total;
+}
+
+      },
 
 
     mounted() {
@@ -328,15 +332,16 @@ export default {
 
 
     methods: {
-    async cargarProductos() {
+async cargarProductos() {
   try {
-    const productos = await obtenerProductos();
-    this.productos = productos.filter(p => p.sucursal === this.sucursal);
+    const productos = await obtenerProductos(this.sucursal);
+    this.productos = productos;
   } catch (error) {
     console.error('Error al cargar productos:', error);
     this.mostrarAlerta('❌ Error al obtener productos del servidor.', 'error');
   }
-    },
+},
+
     guardarCambioInicial() {
   if (!this.cambioInicial || this.cambioInicial <= 0) {
     alert('Ingresa un valor válido para el cambio inicial');
@@ -495,31 +500,36 @@ export default {
 
       this.mostrarAlerta('✔️ Crédito guardado sin afectar caja.', 'exito');
     },
-    cargarTotalDelDia() {
-      const hoy = new Date().toISOString().slice(0, 10);
-      const sucursal = this.sucursal;
+    async cargarTotalDelDia() {
+  try {
+    const token = localStorage.getItem('token');
+    const response = await fetch('http://localhost:3000/api/ventas/dia', {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+
+    const data = await response.json();
+
+    if (data.ok) {
       let total = 0;
-
-      const todasVentas = JSON.parse(localStorage.getItem('ventas_realizadas') || '[]');
-      const ventasHoy = todasVentas.filter(v =>
-        v.sucursal === sucursal &&
-        new Date(v.fecha).toISOString().slice(0, 10) === hoy &&
-        v.metodoPago !== 'credito'
-      );
-      ventasHoy.forEach(v => total += v.total);
-
-      const pagosCredito = JSON.parse(localStorage.getItem('ingresos_credito') || '[]');
-      const pagosHoy = pagosCredito.filter(p =>
-        p.tipo === 'pago_credito' &&
-        p.sucursal === sucursal &&
-        p.fecha?.startsWith(hoy)
-      );
-      pagosHoy.forEach(p => total += p.monto);
+      data.ventas.forEach(v => {
+        if (v.metodo_pago !== 'credito') {
+          total += v.total;
+        }
+      });
 
       this.totalAcumulado = total;
-
-      const claveTotal = `total_acumulado_${sucursal}_${hoy}`;
+      const hoy = new Date().toISOString().slice(0, 10);
+      const claveTotal = `total_acumulado_${this.sucursal}_${hoy}`;
       localStorage.setItem(claveTotal, total.toString());
+    } else {
+      this.mostrarAlerta('⚠️ No se pudieron cargar las ventas del día', 'error');
+    }
+  } catch (error) {
+    console.error('Error al obtener ventas del día:', error);
+    this.mostrarAlerta('❌ Error al cargar total del día', 'error');
+  }
     },
     async finalizarVenta() {
   if (this.metodoPago === 'credito') {
@@ -527,79 +537,95 @@ export default {
     return;
   }
 
-  // Actualizar el stock localmente restando las cantidades vendidas
-  this.carrito.forEach(item => {
-    const prod = this.productos.find(p => p.id === item.id);
-    if (prod) {
-      prod.stock -= item.cantidad;
-      if (prod.stock < 0) prod.stock = 0; // Evitar stock negativo
-    }
-  });
+  const usuario = JSON.parse(localStorage.getItem('usuario')) || {};
+  const productosProcesados = this.carrito.map(p => ({
+    id: p.id,
+    cantidad: p.cantidad,
+    precio_unitario: p.precio,
+    subtotal: parseFloat(p.precio) * p.cantidad
+  }));
 
-  // Actualizar el stock en backend para cada producto
+  const ventaData = {
+    productos: productosProcesados,
+    total: this.total,
+    metodo_pago: this.metodoPago,
+    monto_recibido: this.montoRecibido,
+    cambio: this.cambio
+  };
+
   try {
-    await Promise.all(
-      this.productos.map(producto => {
-        if (typeof producto.stock === 'number') {
-          return actualizarProducto(producto.id, { stock: producto.stock });
-        }
-        return Promise.resolve();
-      })
-    );
+    const respuesta = await realizarVenta(ventaData);
+
+    this.$emit('nueva-venta', {
+      ...ventaData,
+      id: respuesta.venta_id,
+      fecha: new Date().toISOString(),
+      usuario: {
+        nombre: usuario.username,
+        sucursal: this.sucursal
+      },
+      sucursal: this.sucursal
+    });
+
+    this.carritoAnterior = [...this.carrito];
+    this.totalAnterior = this.total;
+    this.metodoPagoAnterior = this.metodoPago;
+
+    this.ventaFinalizada = true;
+    this.carrito = [];
+    this.codigoEscaneado = '';
+    this.sumarAlTotalDelDia(this.total);
+    this.mostrarAlerta('✔️ Venta realizada correctamente.', 'exito');
   } catch (error) {
-    console.error('Error actualizando stock en backend:', error);
-    this.mostrarAlerta('❌ Error actualizando stock en el servidor.', 'error');
+    console.error('Error al registrar venta:', error);
+    this.mostrarAlerta('❌ Error al realizar la venta.', 'error');
+  }
+    },
+    async otorgarCredito() {
+  if (this.carrito.length === 0) {
+    this.mostrarAlerta('⚠️ El carrito está vacío.', 'error');
     return;
   }
 
-  // Obtener usuario actual para registrar la venta
-  const usuarioActual = JSON.parse(localStorage.getItem('usuario')) || {
-    username: 'desconocido',
-    sucursal: 'sin_sucursal'
-  };
+  const productosProcesados = this.carrito.map(p => ({
+    id: p.id,
+    cantidad: p.cantidad,
+    precio_unitario: p.precio,
+    subtotal: parseFloat(p.precio) * p.cantidad
+  }));
 
-  // Crear objeto venta con detalles
-  const venta = {
-    id: Date.now(),
-    productos: JSON.parse(JSON.stringify(this.carrito)),
+  const ventaData = {
+    productos: productosProcesados,
     total: this.total,
-    metodoPago: this.metodoPago,
-    fecha: new Date().toISOString(),
-    usuario: {
-      nombre: usuarioActual.username,
-      sucursal: this.sucursal
-    },
-    sucursal: this.sucursal
+    cliente_id: this.nuevoCreditoCaja.clienteId || null,
+    nombre_cliente: this.nuevoCreditoCaja.nombre,
+    descripcion: this.nuevoCreditoCaja.descripcion,
+    fecha_limite: this.nuevoCreditoCaja.fechaLimite,
   };
 
-  // Guardar venta en localStorage (o backend si aplicas)
-  const todasVentas = JSON.parse(localStorage.getItem('ventas_realizadas')) || [];
-  todasVentas.push(venta);
-  localStorage.setItem('ventas_realizadas', JSON.stringify(todasVentas));
+  try {
+    const respuesta = await otorgarCredito(ventaData);
+    this.mostrarAlerta('✔️ Crédito otorgado correctamente.', 'exito');
+    this.carrito = [];
+    this.total = 0;
 
-  // Sumar al total acumulado diario
-  this.sumarAlTotalDelDia(this.total);
-
-  // Actualizar dinero en caja por sucursal
-  const claveDinero = `dinero_en_caja_${this.sucursal}`;
-  const dineroActual = parseFloat(localStorage.getItem(claveDinero)) || 0;
-  const nuevoDinero = dineroActual + this.total;
-  localStorage.setItem(claveDinero, nuevoDinero.toFixed(2));
-  window.dispatchEvent(new Event("dinero-en-caja-actualizado"));
-
-  // Emitir evento para actualizar reportes u otras vistas
-  this.$emit('nueva-venta', venta);
-
-  // Guardar estado para impresión o referencia
-  this.carritoAnterior = [...this.carrito];
-  this.totalAnterior = this.total;
-  this.metodoPagoAnterior = this.metodoPago;
-
-  // Marcar venta como finalizada y limpiar carrito
-  this.ventaFinalizada = true;
-  this.carrito = [];
-  this.codigoEscaneado = '';
+    this.$emit('nueva-venta', {
+      ...ventaData,
+      id: respuesta.venta_id,
+      metodo_pago: 'credito',
+      fecha: new Date().toISOString(),
+      usuario: {
+        nombre: JSON.parse(localStorage.getItem('usuario')).username,
+        sucursal: this.sucursal
+      },
+      sucursal: this.sucursal
+    });
+  } catch (error) {
+    console.error('Error al otorgar crédito:', error);
+    this.mostrarAlerta('❌ Error al otorgar crédito.', 'error');
+  }
     },
+
     sumarAlTotalDelDia(monto) {
       const hoy = new Date().toISOString().slice(0, 10);
       const claveTotal = `total_acumulado_${this.sucursal}_${hoy}`;

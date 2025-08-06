@@ -22,18 +22,24 @@
     <!-- ➕ Nuevo crédito -->
     <div class="formulario-credito">
       <h2>"PRÉSTAMOS" Crear nuevo crédito</h2>
-      <div class="form-group">
-        <label for="nombreCliente">Nombre del cliente</label>
-        <input id="nombreCliente" v-model="nuevoCredito.nombre" type="text" placeholder="Nombre del cliente" />
-      </div>
-      <div class="form-group">
-        <label for="montoCredito">Monto del crédito</label>
-        <input id="montoCredito" v-model.number="nuevoCredito.monto" type="number" min="1" placeholder="Monto del crédito" />
-      </div>
-      <div class="form-group">
-        <label for="descripcionCredito">Descripción (motivo del crédito)</label>
-        <input id="descripcionCredito" v-model="nuevoCredito.descripcion" type="text" placeholder="Ejemplo: Préstamo por emergencia" />
-      </div>
+<div class="form-group">
+  <label for="nombreCliente">Nombre del cliente</label>
+  <input id="nombreCliente" v-model="nuevoCredito.nombre" type="text" placeholder="Nombre del cliente" />
+  <span v-if="erroresBackend.nombre_cliente" class="error">{{ erroresBackend.nombre_cliente }}</span>
+</div>
+
+<div class="form-group">
+  <label for="montoCredito">Monto del crédito</label>
+  <input id="montoCredito" v-model.number="nuevoCredito.monto" type="number" min="1" placeholder="Monto del crédito" />
+  <span v-if="erroresBackend.monto" class="error">{{ erroresBackend.monto }}</span>
+</div>
+
+<div class="form-group">
+  <label for="descripcionCredito">Descripción</label>
+  <input id="descripcionCredito" v-model="nuevoCredito.descripcion" type="text" placeholder="Ej: Emergencia médica" />
+  <span v-if="erroresBackend.descripcion" class="error">{{ erroresBackend.descripcion }}</span>
+</div>
+
       <button class="btn-crear" @click="crearCredito">Otorgar crédito</button>
     </div>
 
@@ -114,7 +120,8 @@
 
 
 <script>
-import creditosService from "@/services/creditos.service";
+import * as creditosService from "@/services/creditos.service";
+import { registrarCredito } from '@/services/creditos.service';
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
@@ -123,6 +130,7 @@ export default {
   data() {
     return {
       clientes: [],
+      erroresBackend: {},
       historialFinalizados: [],
       busqueda: "",
       filtroMonto: null,
@@ -167,45 +175,61 @@ export default {
   methods: {
     async cargarCreditos() {
       try {
-        const res = await creditosService.obtenerCreditosActivos();
-        this.clientes = res.data.map(c => ({
-          id: c.id,
-          nombre: c.cliente_nombre,
-          creditoPendiente: c.saldo_pendiente,
-          descripcion: c.descripcion || "",
-          sucursal: c.sucursal_id,
-          pago: null,
-        }));
+const creditos = await creditosService.obtenerCreditos();
+this.clientes = creditos.map(c => ({
+  id: c.id,
+  nombre: c.nombre_cliente,
+  creditoPendiente: c.monto - c.monto_pagado,
+  descripcion: c.descripcion || "",
+  sucursal: c.sucursal_id,
+  pago: null,
+}));
+
       } catch (error) {
         this.mostrarToast("Error al cargar créditos activos", "error");
         console.error(error);
       }
     },
 
-    async crearCredito() {
-      const { nombre, monto, descripcion } = this.nuevoCredito;
-      if (!nombre.trim() || monto <= 0) {
-        this.mostrarToast("⚠️ Ingresa un nombre válido y un monto mayor a 0.", "error");
-        return;
-      }
+async crearCredito() {
+  const { nombre, monto, descripcion } = this.nuevoCredito;
 
-      try {
-        const data = {
-          cliente_nombre: nombre.trim(),
-          monto_total: monto,
-          descripcion,
-          fecha_limite_pago: null,
-        };
-        await creditosService.registrarCredito(data);
-        this.mostrarToast("Crédito otorgado correctamente.", "exito");
-        this.nuevoCredito = { nombre: "", monto: null, descripcion: "" };
-        this.dineroEnCaja -= monto;
-        await this.cargarCreditos();
-      } catch (error) {
-        this.mostrarToast("Error al crear crédito.", "error");
-        console.error(error);
-      }
-    },
+  this.erroresBackend = {}; // Limpiar errores anteriores
+
+  if (!nombre.trim() || monto <= 0) {
+    this.mostrarToast("⚠️ Ingresa un nombre válido y un monto mayor a 0.", "error");
+    return;
+  }
+
+  try {
+    const data = {
+      nombre_cliente: nombre.trim(),
+      monto: monto,
+      descripcion: descripcion || '',
+      fecha_limite: null,
+    };
+    await creditosService.registrarCredito(data);
+
+    this.mostrarToast("Crédito otorgado correctamente.", "exito");
+    this.nuevoCredito = { nombre: "", monto: null, descripcion: "" };
+    this.dineroEnCaja -= monto;
+    await this.cargarCreditos();
+
+  } catch (error) {
+    // ✅ Verifica si el error vino del backend por validación
+    if (error.response && error.response.status === 400 && error.response.data.errores) {
+      this.erroresBackend = {};
+      error.response.data.errores.forEach(err => {
+        this.erroresBackend[err.campo] = err.mensaje;
+      });
+      this.mostrarToast("❌ Error en el formulario. Revisa los campos.", "error");
+    } else {
+      this.mostrarToast("❌ Error al crear crédito.", "error");
+    }
+    console.error(error);
+  }
+},
+
 
     async registrarPago(cliente) {
       if (this.pagando) return;
@@ -317,6 +341,13 @@ export default {
   display: inline-block;
   z-index: 10;
 }
+
+.error {
+  color: red;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
 
 .creditos-view {
   position: relative;

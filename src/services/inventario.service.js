@@ -31,10 +31,11 @@ axiosCategorias.interceptors.request.use(config => {
 });
 
 // Productos
-export const obtenerProductos = async () => {
-  const response = await axiosProductos.get('/');
+export const obtenerProductos = async (sucursal) => {
+  const response = await axiosProductos.get('/', { params: { sucursal } });
   return response.data;
 };
+
 
 export const obtenerProductoPorId = async (id) => {
   const response = await axiosProductos.get(`/${id}`);

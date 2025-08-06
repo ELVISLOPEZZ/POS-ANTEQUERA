@@ -1,39 +1,32 @@
 // src/services/creditos.service.js
+import request from '../requests';
 
-
-//SE USA EN: Creditosview.vue
-
-import api from "@/requests";
-
-const API_URL = "/creditos"; // ya baseURL está en api
-
-export default {
-  obtenerCreditosActivos() {
-    return api.get(API_URL);
-  },
-
-  obtenerCreditoPorId(id) {
-    return api.get(`${API_URL}/${id}`);
-  },
-
-  registrarCredito(dataCredito) {
-    return api.post(API_URL, dataCredito);
-  },
-
-  cancelarCredito(id) {
-    return api.put(`${API_URL}/${id}/cancelar`);
-  },
-
-  obtenerPagos(creditoId) {
-    return api.get(`${API_URL}/${creditoId}/pagos`);
-  },
-
-  registrarPago(creditoId, dataPago) {
-    return api.post(`${API_URL}/${creditoId}/pagos`, dataPago);
-  },
-
-  // ✅ Nuevo método: obtener créditos por fecha (query param)
-  obtenerCreditosPorFecha(fecha) {
-    return api.get(`${API_URL}?fecha_venta=${encodeURIComponent(fecha)}`);
-  }
+// Obtener todos los créditos activos por sucursal
+export const obtenerCreditos = async () => {
+  const response = await request.get('/creditos/activos');
+  return response.data.creditos;
 };
+
+// Registrar un nuevo crédito
+export const registrarCredito = async (datosCredito) => {
+  const response = await request.post('/creditos', datosCredito);
+  return response.data.credito;
+};
+
+// Obtener un crédito específico junto con su historial de pagos
+export const obtenerCreditoPorId = async (id) => {
+  const response = await request.get(`/creditos/${id}`);
+  return response.data.credito;
+};
+
+// Cancelar un crédito
+export const cancelarCredito = async (id) => {
+  const response = await request.put(`/creditos/cancelar/${id}`);
+  return response.data.credito;
+};
+
+export const registrarPago = async (creditoId, datosPago) => {
+  const response = await request.post(`/pagos/${creditoId}`, datosPago);
+  return response.data;
+};
+
