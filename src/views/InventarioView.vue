@@ -11,7 +11,7 @@
     <h1>📦Inventario</h1>
 
     <div v-if="alertaActiva" class="alerta-visual">
-      ⚠️ Alerta: Los siguientes productos tienen bajo inventario:
+      ⚠ Alerta: Los siguientes productos tienen bajo inventario:
       <ul>
         <li v-for="p in productosBajoStock" :key="p.id">
           • {{ p.nombre }} (Stock: {{ p.stock }})
@@ -21,7 +21,7 @@
 
     <!-- Alerta de productos caducados -->
     <div v-if="alertaCaducidadActiva" class="alerta-visual alerta-caducados">
-      ⚠️ Alerta: Los siguientes productos están caducados o por caducar:
+      ⚠ Alerta: Los siguientes productos están caducados o por caducar:
       <ul>
         <li v-for="p in productosCaducados" :key="p.id">
           • {{ p.nombre }} (Caducidad: {{ p.fecha_caducidad }})
@@ -32,14 +32,15 @@
     <div class="botones-superior" style="gap: 0.7rem; flex-wrap: wrap; align-items: center;">
       <button class="btn-agregar" @click="crearProducto">➕ Agregar Producto</button>
       <button class="btn-agregar" @click="abrirModalCategoria">📁 Añadir Categoría</button>
-      <button class="btn-agregar btn-eliminar-categoria" @click="abrirModalEliminarCategoria">🗑️ Eliminar Categoría</button>
+      <button class="btn-agregar btn-eliminar-categoria" @click="abrirModalEliminarCategoria">🗑 Eliminar Categoría</button>
 
 
       <div class="filtro-dropdown">
-<select id="categoria" v-model="formulario.categoria_id" required>
-  <option value="" disabled>Seleccione categoría</option>
+<select v-model="categoriaSeleccionada" @change="aplicarFiltro">
+  <option value="">Todas las categorías</option>
   <option v-for="cat in categorias" :key="cat.id" :value="cat.id">{{ cat.nombre }}</option>
 </select>
+
       </div>
 
       
@@ -72,7 +73,8 @@
       >
         <img :src="producto.imagen" alt="producto" />
         <h3>{{ producto.nombre }}</h3>
-        <p>Categoría: {{ producto.categoria }}</p>
+        <p>Categoría: {{ obtenerNombreCategoria(producto.categoria_id) }}</p>
+
         <p>Precio: ${{ producto.precio }}</p>
 
         <!-- Mostrar stock en rojo si está agotado -->
@@ -82,8 +84,8 @@
         </p>
 
         <div class="acciones">
-          <button @click="editarProducto(producto.id)">✏️ Editar</button>
-          <button @click="eliminarProducto(producto.id)">🗑️ Eliminar</button>
+          <button @click="editarProducto(producto.id)">✏ Editar</button>
+          <button @click="eliminarProducto(producto.id)">🗑 Eliminar</button>
         </div>
       </div>
     </div>
@@ -92,11 +94,11 @@
     <transition name="fade">
       <div v-if="modalEliminarActivo" class="modal-eliminar-backdrop">
         <div class="modal-eliminar">
-          <h3>Eliminar Producto ⚠️</h3>
+          <h3>Eliminar Producto ⚠</h3>
           <p>¿Seguro que deseas eliminar <strong>"{{ productoAEliminar?.nombre }}"</strong>?</p>
           <div class="modal-eliminar-botones">
             <button class="btn-cancelar" @click="cancelarEliminar">Cancelar</button>
-            <button class="btn-eliminar-confirmar" @click="confirmarEliminar">🗑️ Eliminar</button>
+            <button class="btn-eliminar-confirmar" @click="confirmarEliminar">🗑 Eliminar</button>
           </div>
         </div>
       </div>
@@ -106,7 +108,7 @@
 <div v-if="modalEliminarCategoriaActivo" class="modal">
   <div class="modal-contenido">
     <h2>Eliminar Categoría</h2>
-    <p>Busca y selecciona una categoría para eliminarla (⚠️ solo si no tiene productos asignados, se creo por error o duplicado).</p>
+    <p>Busca y selecciona una categoría para eliminarla (⚠ solo si no tiene productos asignados, se creo por error o duplicado).</p>
 
     <input
       type="text"
@@ -117,16 +119,15 @@
 
     <div class="form-row">
       <select v-model="categoriaAEliminar">
-        <option value="" disabled>Seleccione una categoría</option>
-        <option
-          v-for="cat in categoriasFiltradasEliminar"
-          :key="cat"
-        >{{ cat }}</option>
-      </select>
+  <option disabled value="">Seleccione una categoría</option>
+  <option v-for="cat in categorias" :key="cat.id" :value="cat.id">
+    {{ cat.nombre }}
+  </option>
+</select>
     </div>
 
     <div class="modal-acciones">
-      <button class="btn-eliminar-confirmar" @click="eliminarCategoria">🗑️ Eliminar</button>
+      <button class="btn-eliminar-confirmar" @click="eliminarCategoria">🗑 Eliminar</button>
       <button class="btn-cancelar" @click="cancelarEliminarCategoria">❌ Cancelar</button>
     </div>
   </div>
@@ -145,9 +146,10 @@
             <div class="form-row">
               <label for="categoria">Categoría</label>
 
-<select id="categoria" v-model="formulario.categoria_id" required>
-  <option value="" disabled>Seleccione categoría</option>
-  <option v-for="cat in categoriasUnicas" :key="cat">{{ cat }}</option>
+<select v-model="formulario.categoria_id">
+  <option v-for="cat in categorias" :key="cat.id" :value="cat.id">
+    {{ cat.nombre }}
+  </option>
 </select>
 
             </div>
@@ -303,6 +305,17 @@ categoriasUnicas() {
 
 
   methods: {
+
+    cancelarCategoria() {
+  this.modalCategoriaActivo = false;
+  this.formCategoria.nombre = '';
+},
+
+obtenerNombreCategoria(idCategoria) {
+  const categoria = this.categorias.find(cat => cat.id === idCategoria);
+  return categoria ? categoria.nombre : 'Sin categoría';
+},
+
     async refrescarProductos() {
   try {
     this.productos = await obtenerProductos(); // ya vienen filtrados por sucursal
@@ -320,8 +333,8 @@ categoriasUnicas() {
       this.productosFiltrados = this.productos.filter(p => {
         const coincideNombre = p.nombre.toLowerCase().includes(termino);
         const coincideCategoria = this.categoriaSeleccionada
-          ? p.categoria === this.categoriaSeleccionada
-          : true;
+  ? p.categoria_id === parseInt(this.categoriaSeleccionada)
+  : true;
         let cumpleFiltroStock = true;
         if (this.filtroStock === 'agotados') {
           cumpleFiltroStock = p.stock === 0;
@@ -407,7 +420,7 @@ async guardarCambios() {
     const productosSucursal = todosLosProductos.filter(p => p.sucursal_id === idSucursal);
 
     const yaExiste = productosSucursal.some(p =>
-      p.codigoBarras === codigo && (esNuevo || p.id !== this.productoSeleccionado)
+      p.codigo_barras === codigo && (esNuevo || p.id !== this.productoSeleccionado)
     );
 
     if (yaExiste) {
@@ -417,20 +430,26 @@ async guardarCambios() {
       return;
     }
 
-if (esNuevo) {
-  const nuevoProducto = {
-    nombre: this.formulario.nombre,
-    precio: parseFloat(this.formulario.precio),
-    stock: parseInt(this.formulario.stock),
-    categoria_id: this.formulario.categoria_id,
-    codigoBarras: codigo,
-    sucursal_id: idSucursal,
-    imagen: this.formulario.imagen || '',
-    fechaCaducidad: this.formulario.fecha_caducidad || ''
-  };
+    // Validar que el id de categoría es válido
+    const categoriaId = parseInt(this.formulario.categoria_id);
+    if (isNaN(categoriaId)) {
+      this.tipoMensaje = 'error';
+      this.mensajeEmergente = '❌ Debes seleccionar una categoría válida.';
+      setTimeout(() => (this.mensajeEmergente = ''), 4000);
+      return;
+    }
 
-  console.log('Datos para crear producto:', nuevoProducto);
-
+    if (esNuevo) {
+      const nuevoProducto = {
+        nombre: this.formulario.nombre,
+        precio: parseFloat(this.formulario.precio),
+        stock: parseInt(this.formulario.stock),
+        categoria_id: categoriaId,
+        codigo_barras: codigo,
+        sucursal_id: idSucursal,
+        imagen: this.formulario.imagen || '',
+        fecha_caducidad: this.formulario.fecha_caducidad || null
+      };
 
       await crearProducto(nuevoProducto);
       this.siguienteId++;
@@ -443,21 +462,25 @@ if (esNuevo) {
 
       if (rol !== 'admin' && stockNuevo < productoOriginal.stock) {
         this.tipoMensaje = 'error';
-        this.mensajeEmergente = '⚠️ No puedes reducir el stock. Solo está permitido aumentarlo.';
+        this.mensajeEmergente = '⚠ No puedes reducir el stock. Solo está permitido aumentarlo.';
         setTimeout(() => (this.mensajeEmergente = ''), 4000);
         return;
       }
 
       const productoActualizado = {
-        ...this.formulario,
-        codigoBarras: codigo,
+        nombre: this.formulario.nombre,
+        precio: parseFloat(this.formulario.precio),
+        stock: parseInt(this.formulario.stock),
+        categoria_id: categoriaId,
+        codigo_barras: codigo,
         sucursal_id: idSucursal,
-        fechaCaducidad: this.formulario.fecha_caducidad
+        imagen: this.formulario.imagen || '',
+        fecha_caducidad: this.formulario.fecha_caducidad || null
       };
 
       await actualizarProducto(this.productoSeleccionado, productoActualizado);
       this.tipoMensaje = 'exito';
-      this.mensajeEmergente = '✏️✅ Producto editado correctamente';
+      this.mensajeEmergente = '✏✅ Producto editado correctamente';
     }
 
     this.modalActivo = false;
@@ -478,7 +501,6 @@ if (esNuevo) {
     }, 4000);
   }
 },
-
 
     eliminarProducto(id) {
       const producto = this.productos.find(p => p.id === id);
@@ -536,82 +558,98 @@ async guardarCategoria() {
     setTimeout(() => (this.mensajeEmergente = ''), 3000);
   }
 },
-    abrirModalEliminarCategoria() {
-      this.busquedaCategoriaEliminar = '';
-      this.categoriaAEliminar = '';
-      this.modalEliminarCategoriaActivo = true;
-    },
-    cancelarEliminarCategoria() {
-      this.modalEliminarCategoriaActivo = false;
-    },
-    eliminarCategoria() {
-      const categoria = this.categoriaAEliminar;
-      if (!categoria) {
-        this.tipoMensaje = 'error';
-        this.mensajeEmergente = '❌ Debes seleccionar una categoría.';
-        setTimeout(() => (this.mensajeEmergente = ''), 3000);
-        return;
-      }
+    async abrirModalEliminarCategoria() {
+    this.busquedaCategoriaEliminar = '';
+    this.categoriaAEliminar = '';
+    this.modalEliminarCategoriaActivo = true;
+    await this.obtenerCategorias(); // Carga desde el backend
+  },
 
-      const tieneProductos = this.productos.some(p => p.categoria === categoria);
-      if (tieneProductos) {
-        this.tipoMensaje = 'error';
-        this.mensajeEmergente = `⚠️ No se puede eliminar. Existen productos con la categoría "${categoria}".`;
-        setTimeout(() => (this.mensajeEmergente = ''), 4000);
-        return;
-      }
+  cancelarEliminarCategoria() {
+    this.modalEliminarCategoriaActivo = false;
+    this.categoriaAEliminar = '';
+  },
 
-      const categorias = this.categoriasPorSucursal[this.sucursal] || [];
-      this.categoriasPorSucursal[this.sucursal] = categorias.filter(c => c !== categoria);
-      localStorage.setItem('categoriasPorSucursal', JSON.stringify(this.categoriasPorSucursal));
+  async eliminarCategoria() {
+    if (!this.categoriaAEliminar) {
+      this.tipoMensaje = 'error';
+      this.mensajeEmergente = '❌ Debes seleccionar una categoría.';
+      setTimeout(() => (this.mensajeEmergente = ''), 3000);
+      return;
+    }
+
+    const categoria = this.categorias.find(c => c.id === this.categoriaAEliminar);
+
+    if (!categoria) {
+      this.tipoMensaje = 'error';
+      this.mensajeEmergente = '❌ Categoría no válida.';
+      setTimeout(() => (this.mensajeEmergente = ''), 3000);
+      return;
+    }
+
+    const tieneProductos = this.productos.some(p => p.categoria_id === categoria.id);
+    if (tieneProductos) {
+      this.tipoMensaje = 'error';
+      this.mensajeEmergente = `⚠ No se puede eliminar. Existen productos con la categoría "${categoria.nombre}".`;
+      setTimeout(() => (this.mensajeEmergente = ''), 4000);
+      return;
+    }
+
+    try {
+      await eliminarCategoria(categoria.id); // función que llama al backend
 
       this.tipoMensaje = 'exito';
-      this.mensajeEmergente = `✅ Categoría "${categoria}" eliminada correctamente.`;
+      this.mensajeEmergente = `✅ Categoría "${categoria.nombre}" eliminada correctamente.`;
       this.modalEliminarCategoriaActivo = false;
       this.categoriaAEliminar = '';
-
-      this.refrescarProductos();
-      setTimeout(() => (this.mensajeEmergente = ''), 3000);
-    },
-    cancelarEdicion() {
-  this.modalActivo = false;
-  this.productoSeleccionado = null;
-  this.limpiarFormulario();
-    },
-    limpiarFormulario() {
-  this.formulario = {
-    nombre: '',
-    categoria_id: '',
-    precio: 0,
-    stock: 0,
-    imagen: '',
-    codigo_barras: '',
-    fecha_caducidad: ''
-  };
-    },
-async obtenerCategorias() {
-  try {
-    const respuesta = await obtenerCategorias(this.sucursal);
-
-    // Si tu función devuelve el array directamente, usa:
-    if (Array.isArray(respuesta)) {
-      this.categorias = respuesta;
-    } else if (respuesta && Array.isArray(respuesta.data)) {
-      this.categorias = respuesta.data;
-    } else {
-      this.categorias = [];
-      console.warn('No se recibieron categorías válidas');
+      await this.obtenerCategorias(); // refrescar lista
+    } catch (error) {
+      console.error('Error al eliminar categoría:', error);
+      this.tipoMensaje = 'error';
+      this.mensajeEmergente = '❌ Error al eliminar la categoría.';
     }
-  } catch (error) {
-    console.error('Error cargando categorías', error);
-    this.categorias = [];
+
+    setTimeout(() => (this.mensajeEmergente = ''), 3000);
+  },
+
+  cancelarEdicion() {
+    this.modalActivo = false;
+    this.productoSeleccionado = null;
+    this.limpiarFormulario();
+  },
+
+  limpiarFormulario() {
+    this.formulario = {
+      nombre: '',
+      categoria_id: '',
+      precio: 0,
+      stock: 0,
+      imagen: '',
+      codigo_barras: '',
+      fecha_caducidad: ''
+    };
+  },
+
+  async obtenerCategorias() {
+    try {
+      const respuesta = await obtenerCategorias(this.sucursal);
+      if (Array.isArray(respuesta)) {
+        this.categorias = respuesta;
+      } else if (respuesta && Array.isArray(respuesta.data)) {
+        this.categorias = respuesta.data;
+      } else {
+        this.categorias = [];
+        console.warn('No se recibieron categorías válidas');
+      }
+    } catch (error) {
+      console.error('Error cargando categorías', error);
+      this.categorias = [];
+    }
   }
-}
-
-
   }
 };
 </script>
+
 
 <style scoped>
 .inventario {
@@ -840,7 +878,7 @@ h1 {
 }
 
 .alerta::before {
-  content: "⚠️ ";
+  content: "⚠ ";
   margin-right: 0.5rem;
   font-size: 1.2rem;
 }

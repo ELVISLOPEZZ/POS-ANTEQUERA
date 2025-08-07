@@ -7,7 +7,7 @@
     <h3>🪙 Ingresar cambio inicial en caja</h3>
     
     <input
-      v-model.number="cambioInicial"
+      v-model.number="cambio_inicial"
       type="number"
       min="1"
       step="0.01"
@@ -242,6 +242,8 @@
 <script>
 import { obtenerProductos, actualizarProducto } from '../services/inventario.service.js';
 import { realizarVenta, otorgarCredito } from '../services/ventas.service.js';
+import { abrirCorte, cerrarCorte } from '../services/corteCaja.service';
+
 
 export default {
   data() {
@@ -250,9 +252,8 @@ export default {
       mostrarModalPago: false,
       montoRecibido: 0,
       cambio: 0,
-      cambioInicial: 0, // ✅ Esto evita el warning
+      cambio_inicial: 0, // ✅ Esto evita el warning
       mostrarModalCambio: false,
-      dineroInicial: 0, // dinero con que inicia la caja
       rol: '',
       productos: [],
       carrito: [],
@@ -269,7 +270,7 @@ export default {
       productoNoEncontrado: false,
       modalVisible: false,
       itemAEliminar: null,
-          corteEnProceso: false,
+      corteEnProceso: false,
       nuevoCreditoCaja: {
         nombre: '',
         descripcion: '',
@@ -292,12 +293,11 @@ export default {
       const texto = this.busquedaProducto.toLowerCase();
       return this.productos.filter(p => p.nombre.toLowerCase().includes(texto));
     },
-dineroEnCajaTotal() {
-  const inicial = parseFloat(this.dineroInicial) || 0;
+    dineroEnCajaTotal() {
+  const inicial = parseFloat(this.cambio_inicial) || 0;
   const total = parseFloat(this.totalAcumulado) || 0;
   return inicial + total;
-}
-
+    }
       },
 
 
@@ -314,9 +314,9 @@ dineroEnCajaTotal() {
     if (!cambioGuardado || isNaN(parseFloat(cambioGuardado))) {
       this.mostrarModalCambio = true;
       this.totalAcumulado = 0;
-      this.dineroInicial = 0;
+      this.cambio_inicial = 0;
     } else {
-      this.dineroInicial = parseFloat(cambioGuardado);
+      this.cambio_inicial = parseFloat(cambioGuardado);
 
       const claveTotal = `total_acumulado_${this.sucursal}_${new Date().toISOString().slice(0, 10)}`;
       const totalGuardado = localStorage.getItem(claveTotal);
@@ -332,7 +332,7 @@ dineroEnCajaTotal() {
 
 
     methods: {
-async cargarProductos() {
+    async cargarProductos() {
   try {
     const productos = await obtenerProductos(this.sucursal);
     this.productos = productos;
@@ -340,39 +340,40 @@ async cargarProductos() {
     console.error('Error al cargar productos:', error);
     this.mostrarAlerta('❌ Error al obtener productos del servidor.', 'error');
   }
-},
-
-    guardarCambioInicial() {
-  if (!this.cambioInicial || this.cambioInicial <= 0) {
+    },
+async guardarCambioInicial() {
+  if (!this.cambio_inicial || this.cambio_inicial <= 0) {
     alert('Ingresa un valor válido para el cambio inicial');
     return;
   }
 
-  this.dineroInicial = this.cambioInicial; // ✅ Asigna el cambio a dineroInicial
+  try {
+    const datosCorte = {
+      cajero_id: this.usuario.id, // Asegúrate de tener this.usuario definido
+      sucursal_id: this.sucursal.id || this.sucursal,
+      dinero_inicial: parseFloat(this.cambio_inicial),
+      dinero_final: 0,
+      total_ventas: 0,
+      total_efectivo: 0,
+      total_tarjeta: 0,
+      total_transferencia: 0,
+      diferencia: 0,
+      fecha_inicio: new Date().toISOString(),
+      observaciones: ''
+    };
 
-  const fecha = new Date().toLocaleDateString();
-  const horaInicio = new Date().toLocaleTimeString();
-  const usuario = JSON.parse(localStorage.getItem('usuario')) || {};
-  const sucursal = usuario.sucursal || 'sin_sucursal';
+    const respuesta = await abrirCorte(datosCorte);
+    console.log('✅ Corte abierto:', respuesta);
 
-  const corte = {
-    fecha,
-    horaInicio,
-    sucursal,
-    usuario: usuario.nombre || 'desconocido',
-    cambio: this.dineroInicial,
-    ventas: [],
-    total: 0,
-  };
+    this.mostrarAlerta('✅ Corte abierto correctamente.', 'exito');
+    this.mostrarModalCambio = false;
 
-  let cortes = JSON.parse(localStorage.getItem('cortes')) || [];
-  cortes.push(corte);
-  localStorage.setItem('cortes', JSON.stringify(cortes));
+  } catch (error) {
+    console.error('Error al abrir corte:', error);
+    this.mostrarAlerta('❌ No se pudo abrir el corte.', 'error');
+  }
+},
 
-  localStorage.setItem(`cambioInicial_${sucursal}`, this.dineroInicial);
-
-  this.mostrarModalCambio = false;
-    },
     agregarAlCarrito(producto) {
   if (producto.stock === 0) return alert('Producto sin stock');
   const encontrado = this.carrito.find(p => p.id === producto.id);
@@ -625,7 +626,6 @@ async cargarProductos() {
     this.mostrarAlerta('❌ Error al otorgar crédito.', 'error');
   }
     },
-
     sumarAlTotalDelDia(monto) {
       const hoy = new Date().toISOString().slice(0, 10);
       const claveTotal = `total_acumulado_${this.sucursal}_${hoy}`;
@@ -716,79 +716,36 @@ this.finalizarVenta();
         this.alerta.visible = false;
       }, 3000);
     }, 
-    realizarCorteDeCaja() {
+async realizarCorteDeCaja() {
   const usuarioData = JSON.parse(localStorage.getItem('usuario')) || {};
-  const ventasGuardadas = JSON.parse(localStorage.getItem('ventas_realizadas')) || [];
-  const cortes = JSON.parse(localStorage.getItem('cortes_realizados')) || [];
-
   if (usuarioData.rol === 'admin') {
     this.mostrarAlerta('⚠️ Los administradores no pueden realizar cortes de caja.', 'error');
     return;
   }
 
-  // ✅ Fecha local en México en formato YYYY-MM-DD
-  const fechaHoy = new Date().toLocaleDateString('es-MX', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).split('/').reverse().join('-');
+  try {
+    const respuesta = await cerrarCorte();
+    this.mostrarAlerta('📦 Corte de caja realizado en servidor.', 'exito');
 
-  const horaActual = new Date().toLocaleTimeString('es-MX');
+    // Limpiar localStorage relacionado al corte
+    const fechaHoy = new Date().toISOString().slice(0, 10);
+    localStorage.removeItem(`total_acumulado_${this.sucursal}_${fechaHoy}`);
+    localStorage.removeItem(`cambioInicial_${this.sucursal}`);
 
-  const usuario = {
-    nombre: usuarioData.nombre || usuarioData.username || 'Desconocido',
-    sucursal: usuarioData.sucursal || this.sucursal
-  };
+    this.totalAcumulado = 0;
+    this.cambio_inicial = 0;
+    this.carrito = [];
+    this.codigoEscaneado = '';
+    this.ventaFinalizada = false;
+    this.metodoPago = 'efectivo';
 
-  const cortesSucursal = cortes
-    .filter(corte => corte.sucursal === this.sucursal)
-    .sort((a, b) => b.timestamp - a.timestamp);
-
-  const ultimoCorteTimestamp = cortesSucursal.length > 0 ? cortesSucursal[0].timestamp : 0;
-
-  const ventasNuevas = ventasGuardadas.filter(venta => {
-    return (
-      venta.sucursal === this.sucursal &&
-      new Date(venta.fecha).getTime() > ultimoCorteTimestamp
-    );
-  });
-
-  const totalVentas = ventasNuevas.reduce((acc, venta) => acc + (venta.total || 0), 0);
-
-  const cambioInicialKey = `cambioInicial_${this.sucursal}`;
-  const cambioInicial = Number(localStorage.getItem(cambioInicialKey)) || 0;
-
-  const totalCaja = cambioInicial + totalVentas;
-
-  const corte = {
-    sucursal: this.sucursal,
-    fecha: fechaHoy,
-    hora: horaActual,
-    total: totalCaja,
-    ventas: ventasNuevas,
-    usuario: usuario,
-    cambioInicial: cambioInicial,
-    totalVentas: totalVentas,
-    timestamp: Date.now()
-  };
-
-  cortes.push(corte);
-  localStorage.setItem('cortes_realizados', JSON.stringify(cortes));
-
-  localStorage.removeItem(`total_acumulado_${this.sucursal}_${fechaHoy}`);
-  localStorage.removeItem(`dinero_en_caja_${this.sucursal}`);
-  localStorage.removeItem(`cambioInicial_${this.sucursal}`);
-
-  this.totalAcumulado = 0;
-  this.dineroInicial = 0;
-  this.carrito = [];
-  this.codigoEscaneado = '';
-  this.ventaFinalizada = false;
-  this.metodoPago = 'efectivo';
-
-  this.mostrarAlerta('📦 Corte de caja realizado exitosamente.', 'exito');
-  window.dispatchEvent(new Event('corte-realizado'));
-    }
+    // Emitir evento para cerrar sesión desde App.vue
+    window.dispatchEvent(new Event('corte-realizado'));
+  } catch (error) {
+    console.error('Error al cerrar corte:', error);
+    this.mostrarAlerta('❌ Error al cerrar el corte en servidor.', 'error');
+  }
+},
   }
 };
 </script>
