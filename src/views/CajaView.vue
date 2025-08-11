@@ -2,27 +2,6 @@
     <div class="caja-view">
       <h1 class="titulo">🪙Caja de Cobro</h1>
 
-<div v-if="mostrarModalCambio" class="modal-overlay">
-  <div class="modal-contenido">
-    <h3>🪙 Ingresar cambio inicial en caja</h3>
-    
-    <input
-      v-model.number="cambio_inicial"
-      type="number"
-      min="1"
-      step="0.01"
-      placeholder="Ej. 500.00"
-      class="input-cambio"
-    />
-
-    <div class="modal-botones">
-      <button class="btn-confirmar" @click="guardarCambioInicial">
-        Guardar
-      </button>
-    </div>
-  </div>
-</div>
-
 
       <!-- ALERTA GENERAL -->
       <div v-if="alerta.visible" :class="['alerta-general', alerta.tipo]">
@@ -63,7 +42,7 @@
             />
             <div>
               <h3>{{ producto.nombre }}</h3>
-<p class="precio">$ {{ Number(producto.precio).toFixed(2) }}</p>
+              <p class="precio">$ {{ Number(producto.precio).toFixed(2) }}</p>
               <p class="stock" v-if="producto.stock !== undefined">Stock: {{ producto.stock }}</p>
               <p class="codigo">Código: {{ producto.codigoBarras }}</p>
             </div>
@@ -240,48 +219,53 @@
 
 
 <script>
-import { obtenerProductos, actualizarProducto } from '../services/inventario.service.js';
-import { realizarVenta, otorgarCredito } from '../services/ventas.service.js';
+import { obtenerProductos,buscarProductoPorCodigo, actualizarProducto } from '../services/inventario.service.js';
+import { realizarVenta, otorgarCredito, obtenerVentasDelDia } from '../services/ventas.service.js';
 import { abrirCorte, cerrarCorte } from '../services/corteCaja.service';
+import { obtenerUsuarioActual } from '../services/auth.js';
 
 
 export default {
-  data() {
-        return {
-      sucursal: JSON.parse(localStorage.getItem('usuario'))?.sucursal || 'sin_sucursal',
-      mostrarModalPago: false,
-      montoRecibido: 0,
-      cambio: 0,
-      cambio_inicial: 0, // ✅ Esto evita el warning
-      mostrarModalCambio: false,
-      rol: '',
-      productos: [],
-      carrito: [],
-      codigoEscaneado: '',
-      metodoPago: 'efectivo',
-      ventaFinalizada: false,
-      carritoAnterior: [],
-      metodoPagoAnterior: '',
-      totalAnterior: 0,
-      totalAcumulado: 0, // ventas del día
-      ventasRealizadas: [],
-      inputActivo: false,
-      busquedaProducto: '',
-      productoNoEncontrado: false,
-      modalVisible: false,
-      itemAEliminar: null,
-      corteEnProceso: false,
-      nuevoCreditoCaja: {
-        nombre: '',
-        descripcion: '',
-      },
-      alerta: {
-        visible: false,
-        mensaje: '',
-        tipo: 'exito'
-      }
-    };
-  },
+data() {
+  const usuarioLocal = JSON.parse(localStorage.getItem('usuario')) || {};
+
+  return {
+    usuario: usuarioLocal,                        // Usuario completo
+    sucursal: usuarioLocal.sucursal || 'sin_sucursal', // Sucursal del usuario o valor por defecto
+    mostrarModalPago: false,
+    montoRecibido: 0,
+    cambio: 0,
+    cambio_inicial: 0,                           // Valor inicial para evitar warnings
+    mostrarModalCambio: false,
+    rol: usuarioLocal.rol || '',                 // Rol del usuario o cadena vacía
+    productos: [],
+    carrito: [],
+    codigoEscaneado: '',
+    metodoPago: 'efectivo',
+    ventaFinalizada: false,
+    carritoAnterior: [],
+    metodoPagoAnterior: '',
+    totalAnterior: 0,
+    totalAcumulado: 0,                           // Ventas del día
+    ventasRealizadas: [],
+    inputActivo: false,
+    busquedaProducto: '',
+    productoNoEncontrado: false,
+    modalVisible: false,
+    itemAEliminar: null,
+    corteEnProceso: false,
+    nuevoCreditoCaja: {
+      nombre: '',
+      descripcion: '',
+    },
+    alerta: {
+      visible: false,
+      mensaje: '',
+      tipo: 'exito'
+    }
+  };
+},
+
 
 
     computed: {
@@ -301,38 +285,33 @@ export default {
       },
 
 
-    mounted() {
-  const usuario = JSON.parse(localStorage.getItem('usuario')) || {};
-  this.rol = usuario.rol || 'cajero';
+    async mounted() {
+  try {
+    this.usuario = await obtenerUsuarioActual();
 
-  this.cargarProductos();
-
-  const claveCambio = `cambioInicial_${this.sucursal}`;
-  const cambioGuardado = localStorage.getItem(claveCambio);
-
-  if (this.rol.toLowerCase() !== 'admin') {
-    if (!cambioGuardado || isNaN(parseFloat(cambioGuardado))) {
-      this.mostrarModalCambio = true;
-      this.totalAcumulado = 0;
-      this.cambio_inicial = 0;
-    } else {
-      this.cambio_inicial = parseFloat(cambioGuardado);
-
-      const claveTotal = `total_acumulado_${this.sucursal}_${new Date().toISOString().slice(0, 10)}`;
-      const totalGuardado = localStorage.getItem(claveTotal);
-      if (totalGuardado) {
-        this.totalAcumulado = parseFloat(totalGuardado);
-      } else {
-        this.totalAcumulado = 0;
-      }
+    if (!this.usuario) {
+      console.error('No se encontró usuario');
+      return;
     }
-  }
 
+    this.sucursal = localStorage.getItem('store_code') || this.usuario.store_code || 'sin_sucursal';
+    this.rol = this.usuario.rol || localStorage.getItem('rol_usuario') || 'cajero';
+
+    await this.cargarProductos();
+
+    await this.cargarTotalDelDia(); // <-- Agregar esta línea
+
+  } catch (error) {
+    console.error('Error al obtener usuario actual:', error);
+  }
     },
 
 
+
+
+
     methods: {
-    async cargarProductos() {
+async cargarProductos() {
   try {
     const productos = await obtenerProductos(this.sucursal);
     this.productos = productos;
@@ -340,16 +319,27 @@ export default {
     console.error('Error al cargar productos:', error);
     this.mostrarAlerta('❌ Error al obtener productos del servidor.', 'error');
   }
-    },
+},
+
 async guardarCambioInicial() {
   if (!this.cambio_inicial || this.cambio_inicial <= 0) {
     alert('Ingresa un valor válido para el cambio inicial');
     return;
   }
 
+  if (!this.usuario || !this.usuario.id) {
+    this.mostrarAlerta('No se encontró información del usuario.', 'error');
+    return;
+  }
+
+  if (!this.sucursal || (!this.sucursal.id && typeof this.sucursal !== 'number')) {
+    this.mostrarAlerta('No se encontró información de la sucursal.', 'error');
+    return;
+  }
+
   try {
     const datosCorte = {
-      cajero_id: this.usuario.id, // Asegúrate de tener this.usuario definido
+      cajero_id: this.usuario.id,
       sucursal_id: this.sucursal.id || this.sucursal,
       dinero_inicial: parseFloat(this.cambio_inicial),
       dinero_final: 0,
@@ -363,8 +353,6 @@ async guardarCambioInicial() {
     };
 
     const respuesta = await abrirCorte(datosCorte);
-    console.log('✅ Corte abierto:', respuesta);
-
     this.mostrarAlerta('✅ Corte abierto correctamente.', 'exito');
     this.mostrarModalCambio = false;
 
@@ -374,23 +362,16 @@ async guardarCambioInicial() {
   }
 },
 
+
     agregarAlCarrito(producto) {
-  if (producto.stock === 0) return alert('Producto sin stock');
-  const encontrado = this.carrito.find(p => p.id === producto.id);
-  if (encontrado) {
-    if (encontrado.cantidad < producto.stock) encontrado.cantidad++;
-    else alert('No hay más stock disponible');
-  } else {
-    this.carrito.push({ ...producto, cantidad: 1 });
-  }
-
-  this.ventaFinalizada = false;
-
-  // ✅ Limpia el buscador y oculta los resultados
-  this.busquedaProducto = '';
-
-  // ✅ Opcional: reenfocar input de código de barras
-  this.$nextTick(() => this.$refs.inputCodigo?.focus());
+      if (producto.stock === 0) return this.mostrarAlerta('Producto sin stock', 'error');
+      const encontrado = this.carrito.find(p => p.id === producto.id);
+      if (encontrado) {
+        if (encontrado.cantidad < producto.stock) encontrado.cantidad++;
+        else this.mostrarAlerta('No hay más stock disponible', 'error');
+      } else {
+        this.carrito.push({ ...producto, cantidad: 1 });
+      }
     },
     cambiarCantidad(item, delta) {
       const nuevaCantidad = item.cantidad + delta;
@@ -410,18 +391,29 @@ async guardarCambioInicial() {
       this.modalVisible = false;
       this.itemAEliminar = null;
     },
-    procesarEscaneo() {
+    async procesarEscaneo() {
       const codigo = this.codigoEscaneado.trim();
       if (!codigo) return;
-      const producto = this.productos.find(p => p.codigoBarras === codigo);
-      if (!producto) {
-        this.productoNoEncontrado = true;
-        setTimeout(() => (this.productoNoEncontrado = false), 3000);
+
+      try {
+        const producto = await buscarProductoPorCodigo(codigo);
+        if (!producto) {
+          this.productoNoEncontrado = true;
+          this.mostrarAlerta('Producto no encontrado', 'error');
+          setTimeout(() => (this.productoNoEncontrado = false), 3000);
+          return;
+        }
+        this.agregarAlCarrito(producto);
+      } catch (error) {
+        console.error('Error buscando producto:', error);
+        this.mostrarAlerta('Error al buscar producto', 'error');
+      } finally {
         this.codigoEscaneado = '';
-        return;
       }
-      this.agregarAlCarrito(producto);
-      this.codigoEscaneado = '';
+    },
+    mostrarAlerta(mensaje, tipo = 'exito') {
+      this.alerta = { mensaje, tipo, visible: true };
+      setTimeout(() => (this.alerta.visible = false), 3000);
     },
     guardarCredito() {
       if (!this.nuevoCreditoCaja.nombre.trim()) {
@@ -503,33 +495,23 @@ async guardarCambioInicial() {
     },
     async cargarTotalDelDia() {
   try {
-    const token = localStorage.getItem('token');
-    const response = await fetch('http://localhost:3000/api/ventas/dia', {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    });
+    const data = await obtenerVentasDelDia(); // Llama a la API
 
-    const data = await response.json();
-
-    if (data.ok) {
+    if (data.ok && Array.isArray(data.ventas)) {
       let total = 0;
       data.ventas.forEach(v => {
         if (v.metodo_pago !== 'credito') {
-          total += v.total;
+          total += Number(v.total);
         }
       });
-
       this.totalAcumulado = total;
-      const hoy = new Date().toISOString().slice(0, 10);
-      const claveTotal = `total_acumulado_${this.sucursal}_${hoy}`;
-      localStorage.setItem(claveTotal, total.toString());
     } else {
-      this.mostrarAlerta('⚠️ No se pudieron cargar las ventas del día', 'error');
+      this.totalAcumulado = 0;
+      this.mostrarAlerta('No se pudieron cargar las ventas del día', 'error');
     }
   } catch (error) {
     console.error('Error al obtener ventas del día:', error);
-    this.mostrarAlerta('❌ Error al cargar total del día', 'error');
+    this.mostrarAlerta('Error al cargar total del día', 'error');
   }
     },
     async finalizarVenta() {
@@ -716,7 +698,7 @@ this.finalizarVenta();
         this.alerta.visible = false;
       }, 3000);
     }, 
-async realizarCorteDeCaja() {
+    async realizarCorteDeCaja() {
   const usuarioData = JSON.parse(localStorage.getItem('usuario')) || {};
   if (usuarioData.rol === 'admin') {
     this.mostrarAlerta('⚠️ Los administradores no pueden realizar cortes de caja.', 'error');
@@ -745,7 +727,7 @@ async realizarCorteDeCaja() {
     console.error('Error al cerrar corte:', error);
     this.mostrarAlerta('❌ Error al cerrar el corte en servidor.', 'error');
   }
-},
+    },
   }
 };
 </script>

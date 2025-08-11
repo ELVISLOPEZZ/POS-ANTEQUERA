@@ -1,7 +1,8 @@
+// src/services/productos.service.js
 import axios from 'axios';
 
-const API_URL = 'http://localhost:3000/api/productos'; // Base para productos
-const API_CATEGORIAS_URL = 'http://localhost:3000/api/categorias'; // Base para categorías
+const API_URL = 'http://localhost:3000/api/productos';
+const API_CATEGORIAS_URL = 'http://localhost:3000/api/categorias';
 
 function obtenerToken() {
   const token = localStorage.getItem('token');
@@ -18,63 +19,56 @@ const axiosCategorias = axios.create({
   headers: { 'Content-Type': 'application/json' }
 });
 
-axiosProductos.interceptors.request.use(config => {
-  const token = obtenerToken();
-  if (token) config.headers.Authorization = token;
-  return config;
-});
+// Interceptores para agregar token automáticamente
+[axiosProductos, axiosCategorias].forEach(instance => {
+  instance.interceptors.request.use(config => {
+    const token = obtenerToken();
+    if (token) config.headers.Authorization = token;
+    return config;
+  });
 
-axiosCategorias.interceptors.request.use(config => {
-  const token = obtenerToken();
-  if (token) config.headers.Authorization = token;
-  return config;
+  instance.interceptors.response.use(
+    res => res.data, // Solo devolvemos data
+    err => {
+      // Si el token expira o es inválido
+      if (err.response?.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
+      // Re-lanzamos el error para manejarlo en el componente
+      return Promise.reject(err.response?.data || err);
+    }
+  );
 });
 
 // Productos
-export const obtenerProductos = async (sucursal) => {
-  const response = await axiosProductos.get('/', { params: { sucursal } });
-  return response.data;
-};
+export const obtenerProductos = (sucursal) =>
+  axiosProductos.get('/', { params: { sucursal } });
 
+export const obtenerProductoPorId = (id) =>
+  axiosProductos.get(`/${id}`);
 
-export const obtenerProductoPorId = async (id) => {
-  const response = await axiosProductos.get(`/${id}`);
-  return response.data;
-};
+export const buscarProductoPorCodigo = (codigo) =>
+  axiosProductos.get(`/codigo/${codigo}`);
 
-export const crearProducto = async (producto) => {
-  const response = await axiosProductos.post('/', producto);
-  return response.data;
-};
+export const crearProducto = (producto) =>
+  axiosProductos.post('/', producto);
 
-export const actualizarProducto = async (id, producto) => {
-  const response = await axiosProductos.put(`/${id}`, producto);
-  return response.data;
-};
+export const actualizarProducto = (id, producto) =>
+  axiosProductos.put(`/${id}`, producto);
 
-export const eliminarProducto = async (id) => {
-  const response = await axiosProductos.delete(`/${id}`);
-  return response.data;
-};
+export const eliminarProducto = (id) =>
+  axiosProductos.delete(`/${id}`);
 
-export const obtenerAlertasInventario = async () => {
-  const response = await axiosProductos.get('/alertas');
-  return response.data;
-};
+export const obtenerAlertasInventario = () =>
+  axiosProductos.get('/alertas');
 
 // Categorías
-export const obtenerCategorias = async (sucursal) => {
-  const response = await axiosCategorias.get(`/?sucursal=${sucursal}`);
-  return response.data;
-};
+export const obtenerCategorias = (sucursal) =>
+  axiosCategorias.get('/', { params: { sucursal } });
 
+export const crearCategoria = (categoria) =>
+  axiosCategorias.post('/', categoria);
 
-export const crearCategoria = async (categoria) => {
-  const response = await axiosCategorias.post('/', categoria);
-  return response.data;
-};
-
-export const eliminarCategoria = async (id) => {
-  const response = await axiosCategorias.delete(`/${id}`);
-  return response.data;
-};
+export const eliminarCategoria = (id) =>
+  axiosCategorias.delete(`/${id}`);

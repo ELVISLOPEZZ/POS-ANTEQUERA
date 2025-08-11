@@ -1,6 +1,16 @@
 // src/auth.js
 import api from "@/requests"; // Importa la instancia axios configurada
 
+export const obtenerUsuarioActual = async () => {
+  try {
+    const res = await api.get('/auth/me');
+    return res.data;
+  } catch (error) {
+    console.error('Error al obtener usuario actual:', error);
+    return null;
+  }
+};
+
 // Login
 export async function login(username, password) {
   try {

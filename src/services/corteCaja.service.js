@@ -3,7 +3,7 @@ import api from '../requests'; // Usa esta instancia que ya agrega el token
 
 const API_BASE = '/corte';
 
-export async function abrirCorte(dinero_inicial, sucursal_id) {
+export async function abrirCorte(datosCorte) {
   const token = localStorage.getItem('token');
 
   const response = await fetch('http://localhost:3000/api/corte/abrir', {
@@ -12,7 +12,7 @@ export async function abrirCorte(dinero_inicial, sucursal_id) {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`
     },
-    body: JSON.stringify({ dinero_inicial, sucursal_id })
+    body: JSON.stringify(datosCorte)
   });
 
   if (!response.ok) {
@@ -22,7 +22,6 @@ export async function abrirCorte(dinero_inicial, sucursal_id) {
 
   return response.json();
 }
-
 
 
 export const cerrarCorte = async () => {

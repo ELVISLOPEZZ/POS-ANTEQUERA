@@ -3,6 +3,8 @@
 
 import api from '../requests';
 
+
+
 export const obtenerUsuarios = async () => {
   const res = await api.get('/usuarios');
   return res.data;
